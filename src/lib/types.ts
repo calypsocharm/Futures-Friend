@@ -1,3 +1,5 @@
+import type { Divergence } from "./indicators";
+
 export type Timeframe =
   | "1M"
   | "1W"
@@ -83,6 +85,7 @@ export interface ConfluenceReport {
   setups: Setup[];
   gauges: Gauge[];
   matrix: MatrixRow[];
+  divergences: Partial<Record<Timeframe, Divergence[]>>;
 }
 
 export interface KeyLevel {

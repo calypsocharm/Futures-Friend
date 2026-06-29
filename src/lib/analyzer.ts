@@ -1,3 +1,4 @@
+import type { Divergence } from "./indicators";
 import type {
   Bar,
   ConfluenceReport,
@@ -12,7 +13,7 @@ import type {
   TradePlan,
 } from "./types";
 import { TIMEFRAME_LABELS } from "./types";
-import { atr, emaLast, flowPressure, marketStructure, rsi, swingPoints } from "./indicators";
+import { atr, detectDivergences, emaLast, flowPressure, marketStructure, rsi, rsiSeries, swingPoints } from "./indicators";
 import { symbolDef } from "./symbols";
 
 export function analyzeTimeframe(timeframe: Timeframe, bars: Bar[]): TimeframeAnalysis {
@@ -119,7 +120,8 @@ export function buildConfluenceReport(
   const advisor = composeAdvisor(dominant, confidence, perTimeframe);
   const keyLevels = aggregateKeyLevels(perTimeframe);
   const tradePlan = buildTradePlan(dominant, perTimeframe, keyLevels);
-  const setups = detectSetups(perTimeframe);
+  const setups = detectSetups(perTimeframe, barsByTimeframe);
+  const divergences = computeDivergences(barsByTimeframe, perTimeframe);
   const gauges = buildGauges(barsByTimeframe, perTimeframe);
   const matrix = buildMatrix(perTimeframe);
 
@@ -137,7 +139,25 @@ export function buildConfluenceReport(
     setups,
     gauges,
     matrix,
+    divergences,
   };
+}
+
+function computeDivergences(
+  barsByTimeframe: Partial<Record<Timeframe, Bar[]>>,
+  analyses: TimeframeAnalysis[]
+): Partial<Record<Timeframe, Divergence[]>> {
+  const out: Partial<Record<Timeframe, Divergence[]>> = {};
+  for (const a of analyses) {
+    const bars = barsByTimeframe[a.timeframe];
+    if (!bars || bars.length < 30) continue;
+    const rsiVals = rsiSeries(bars.map((b) => b.close), 14);
+    const divs = detectDivergences(bars, rsiVals, 5, 40);
+    if (divs.length > 0) {
+      out[a.timeframe] = divs.map((d) => ({ ...d, tf: a.timeframe }));
+    }
+  }
+  return out;
 }
 
 function composeAdvisor(
@@ -317,9 +337,24 @@ function buildTradePlan(
   };
 }
 
-function detectSetups(analyses: TimeframeAnalysis[]): Setup[] {
+function detectSetups(analyses: TimeframeAnalysis[], barsByTimeframe: Partial<Record<Timeframe, Bar[]>>): Setup[] {
   const out: Setup[] = [];
   for (const a of analyses) {
+    const bars = barsByTimeframe[a.timeframe];
+    if (bars && bars.length >= 30) {
+      const rsiVals = rsiSeries(bars.map((b) => b.close), 14);
+      const divs = detectDivergences(bars, rsiVals, 5, 40);
+      for (const d of divs) {
+        const bias = d.kind === "regular-bull" || d.kind === "hidden-bull" ? "long" : "short";
+        const kind: Setup["kind"] = "RSI divergence";
+        out.push({
+          kind,
+          bias,
+          timeframe: a.timeframe,
+          detail: `${a.label}: ${d.message}`,
+        });
+      }
+    }
     if (a.direction === "bull" && a.lastPrice > 0 && a.ema20 > 0 && a.lastPrice > a.ema20 && a.lastPrice < a.ema20 + 0.3 * a.atr) {
       out.push({
         kind: "EMA20 pullback (trend continuation)",

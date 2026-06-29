@@ -5,17 +5,25 @@ import { useAnalysis } from "@/store/analysis";
 import { CandleChart } from "@/components/CandleChart";
 import { ema } from "@/lib/indicators";
 import { swingPoints } from "@/lib/indicators";
+import type { Divergence } from "@/lib/indicators";
 import type { Timeframe } from "@/lib/types";
 import { TIMEFRAMES, TIMEFRAME_LABELS } from "@/lib/types";
 
 export function ChartPanel() {
   const symbol = useAnalysis((s) => s.symbol);
   const barsByTimeframe = useAnalysis((s) => s.barsByTimeframe);
+  const report = useAnalysis((s) => s.report);
   const [tf, setTf] = useState<Timeframe>("1D");
   const [count, setCount] = useState(120);
 
   const bars = useMemo(() => barsByTimeframe[tf] ?? [], [barsByTimeframe, tf]);
   const slice = useMemo(() => bars.slice(-count), [bars, count]);
+
+  const divergences: Divergence[] = useMemo(() => {
+    if (!report || !report.divergences[tf]) return [];
+    const all = report.divergences[tf] ?? [];
+    return all.filter((d) => d.idxB >= bars.length - count);
+  }, [report, tf, bars, count]);
 
   const ema20 = useMemo(() => (slice.length > 0 ? ema(slice.map((b) => b.close), 20) : []), [slice]);
   const ema50 = useMemo(() => (slice.length > 0 ? ema(slice.map((b) => b.close), 50) : []), [slice]);
@@ -71,6 +79,8 @@ export function ChartPanel() {
             ema200={ema200.length === slice.length ? ema200 : undefined}
             swingHigh={swings.high}
             swingLow={swings.low}
+            divergences={divergences}
+            barOffset={bars.length - slice.length}
             height={380}
           />
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--text-muted)]">

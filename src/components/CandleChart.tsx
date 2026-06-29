@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { Bar } from "@/lib/types";
+import type { Divergence } from "@/lib/indicators";
 
 interface Props {
   bars: Bar[];
@@ -10,6 +11,8 @@ interface Props {
   ema200?: number[];
   swingHigh?: number | null;
   swingLow?: number | null;
+  divergences?: Divergence[];
+  barOffset?: number;
   height?: number;
 }
 
@@ -20,7 +23,7 @@ const PAD_T = 10;
 const PAD_B = 18;
 const VOL_H = 40;
 
-export function CandleChart({ bars, ema20, ema50, ema200, swingHigh, swingLow, height = 360 }: Props) {
+export function CandleChart({ bars, ema20, ema50, ema200, swingHigh, swingLow, divergences, barOffset = 0, height = 360 }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -202,6 +205,35 @@ export function CandleChart({ bars, ema20, ema50, ema200, swingHigh, swingLow, h
         {ema20Path && <path d={ema20Path} fill="none" stroke="#f0b429" strokeWidth="1.4" opacity="0.9" />}
         {ema50Path && <path d={ema50Path} fill="none" stroke="#7aa2ff" strokeWidth="1.4" opacity="0.9" />}
         {ema200Path && <path d={ema200Path} fill="none" stroke="#c084fc" strokeWidth="1.4" opacity="0.9" />}
+
+        {/* Divergence lines */}
+        {divergences && divergences.length > 0 && (() => {
+          const DIV_COLOR: Record<string, string> = {
+            "regular-bear": "var(--bear)",
+            "regular-bull": "var(--bull)",
+            "hidden-bear": "#ff9a4a",
+            "hidden-bull": "#5ad1c4",
+          };
+          return divergences.map((d, i) => {
+            const aIdx = d.idxA - barOffset;
+            const bIdx = d.idxB - barOffset;
+            if (aIdx < 0 || bIdx < 0 || aIdx >= recent.length || bIdx >= recent.length) return null;
+            const color = DIV_COLOR[d.kind] ?? "var(--neutral)";
+            const yA = y(d.priceA);
+            const yB = y(d.priceB);
+            const isBear = d.kind.includes("bear");
+            return (
+              <g key={"div" + i}>
+                <line x1={x(aIdx)} y1={yA} x2={x(bIdx)} y2={yB} stroke={color} strokeWidth="1.5" strokeDasharray="4 3" opacity="0.85" />
+                <circle cx={x(aIdx)} cy={yA} r="3" fill={color} />
+                <circle cx={x(bIdx)} cy={yB} r="3" fill={color} />
+                <text x={x(bIdx) + 4} y={yB - 6} fill={color} fontSize="9" fontFamily="ui-monospace, monospace">
+                  {isBear ? "▼" : "▲"} {d.kind.split("-")[1]} div
+                </text>
+              </g>
+            );
+          });
+        })()}
 
         {/* last price line */}
         <line
