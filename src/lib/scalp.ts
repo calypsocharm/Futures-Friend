@@ -265,12 +265,14 @@ function composeScalpAdvisor(
   const noFresh = fresh.length === 0;
   const noBursts = bursts.length === 0;
 
-  const chopScore = (tangledTFs.length >= 3 ? 1 : 0) + (deadTFs.length >= 3 ? 1 : 0) + (noFresh ? 1 : 0) + (noBursts ? 1 : 0) + (neutralTFs.length >= 3 ? 1 : 0) + (confidence < 50 ? 1 : 0);
+  const strongBias = dominant !== "neutral" && confidence >= 60;
+  const splitTFs = confidence < 55 || dominant === "neutral";
+  const chopScore = (tangledTFs.length >= 3 ? 1 : 0) + (neutralTFs.length >= 4 ? 1 : 0) + (splitTFs ? 1 : 0) + (noFresh && splitTFs ? 1 : 0) + (noBursts && splitTFs ? 1 : 0);
 
-  if (dominant === "neutral" || chopScore >= 3) {
+  if (splitTFs && chopScore >= 2) {
     const reasons: string[] = [];
     if (tangledTFs.length > 0) reasons.push(`EMA9/21 tangled on ${tangledTFs.join(", ")} (no separation = no trend)`);
-    if (deadTFs.length > 0) reasons.push(`vol dead on ${deadTFs.join(", ")} (${deadVol[0]?.atrPct.toFixed(2)}% ATR — not enough range)`);
+    if (deadTFs.length >= 4) reasons.push(`vol dead across ${deadTFs.length} TFs (${deadVol[0]?.atrPct.toFixed(2)}% ATR — not enough range)`);
     if (noFresh) reasons.push("no fresh EMA9/21 cross");
     if (noBursts) reasons.push("no momentum bursts");
     if (neutralTFs.length >= 3) reasons.push(`${neutralTFs.length}/${analyses.length} TFs neutral`);
@@ -281,7 +283,11 @@ function composeScalpAdvisor(
   const dirAdj = dominant === "bull" ? "long" : "short";
   const parts = [`${confidence}% ${dirAdj} bias across scalp TFs. Bull: ${bullTFs.join(", ") || "none"}. Bear: ${bearTFs.join(", ") || "none"}.`];
 
-  if (fresh.length > 0) {
+  if (strongBias && noFresh && deadTFs.length >= 4) {
+    parts.push(`Trend is intact but vol is thin (${deadVol[0]?.atrPct.toFixed(2)}% ATR) and no fresh cross — slow grind, hold existing ${dirAdj}s but don't add aggressively. Not chop, just quiet.`);
+  } else if (strongBias && noFresh) {
+    parts.push(`Trend holding with no fresh cross — continuation, not a new trigger. Hold existing ${dirAdj}s, wait for a pullback to add.`);
+  } else if (fresh.length > 0) {
     parts.push(`Fresh EMA9/21 cross on ${fresh.map((s) => s.tf).join(", ")} — that's your trigger. ${dirAdj === "long" ? "Buy the cross, stop below the swing." : "Sell the cross, stop above the swing."}`);
   } else {
     parts.push(`No fresh cross yet — wait for EMA9/21 to flip on 1m/3m/5m before committing. Don't chase.`);
