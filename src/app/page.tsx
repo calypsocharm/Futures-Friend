@@ -13,6 +13,10 @@ import { RiskCalculator } from "@/components/RiskCalculator";
 import { SetupsPanel } from "@/components/SetupsPanel";
 import { GaugesPanel } from "@/components/GaugesPanel";
 import { ChartPanel } from "@/components/ChartPanel";
+import { WatchlistPanel } from "@/components/WatchlistPanel";
+import { AlertsPanel } from "@/components/AlertsPanel";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
+import { useWatchlist } from "@/store/watchlist";
 import { symbolDef } from "@/lib/symbols";
 
 export default function Page() {
@@ -24,11 +28,31 @@ export default function Page() {
   const error = useAnalysis((s) => s.error);
   const fetchedAt = useAnalysis((s) => s.fetchedAt);
   const live = useAnalysis((s) => s.live);
+  const autoRefresh = useWatchlist((s) => s.autoRefresh);
+  const setAutoRefresh = useWatchlist((s) => s.setAutoRefresh);
+  const intervalSec = useWatchlist((s) => s.intervalSec);
+  const setIntervalSec = useWatchlist((s) => s.setIntervalSec);
+  const setItem = useWatchlist((s) => s.setItem);
   const tfCount = Object.values(barsByTimeframe).filter((b) => b && b.length > 0).length;
 
+  useAutoRefresh();
+
   useEffect(() => {
-    if (tfCount === 0 && !loading) refresh();
+    if (tfCount === 0 && !loading) void refresh();
   }, [tfCount, loading, refresh]);
+
+  useEffect(() => {
+    if (report && report.perTimeframe[0]) {
+      setItem({
+        symbol,
+        label: symbolDef(symbol)?.label ?? symbol,
+        direction: report.dominant,
+        confidence: report.confidence,
+        lastPrice: report.perTimeframe[0].lastPrice,
+        updatedAt: Date.now(),
+      });
+    }
+  }, [report, symbol, setItem]);
 
   const def = symbolDef(symbol);
 
@@ -68,6 +92,33 @@ export default function Page() {
           >
             {loading ? "Refreshing…" : "Refresh now"}
           </button>
+          <div className="mt-2 flex items-center justify-between">
+            <label className="text-[var(--text-muted)]">Auto-refresh</label>
+            <button
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className="rounded-md border px-2 py-0.5 text-[10px] font-bold"
+              style={{
+                background: autoRefresh ? "var(--bull)" : "var(--bg-panel)",
+                color: autoRefresh ? "var(--bg)" : "var(--text-muted)",
+                borderColor: autoRefresh ? "var(--bull)" : "var(--border)",
+              }}
+            >
+              {autoRefresh ? "ON" : "OFF"}
+            </button>
+          </div>
+          <div className="mt-1 flex items-center justify-between">
+            <label className="text-[var(--text-muted)]">Interval</label>
+            <select
+              value={intervalSec}
+              onChange={(e) => setIntervalSec(Number(e.target.value))}
+              className="rounded-md border border-[var(--border)] bg-[var(--bg-panel-2)] px-2 py-0.5 text-[10px]"
+            >
+              <option value={30}>30s</option>
+              <option value={60}>60s</option>
+              <option value={120}>2m</option>
+              <option value={300}>5m</option>
+            </select>
+          </div>
           {error && (
             <div className="mt-1 text-[10px] text-[var(--bear)]">{error}</div>
           )}
@@ -94,7 +145,15 @@ export default function Page() {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-6">
-        <AdvisorBanner />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <AdvisorBanner />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
+            <WatchlistPanel />
+            <AlertsPanel />
+          </div>
+        </div>
 
         {report && report.perTimeframe.length > 0 && (
           <div className="mt-6">
