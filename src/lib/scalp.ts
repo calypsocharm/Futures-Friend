@@ -253,12 +253,29 @@ function composeScalpAdvisor(
 ): string {
   const bullTFs = analyses.filter((a) => a.direction === "bull").map((a) => a.tf);
   const bearTFs = analyses.filter((a) => a.direction === "bear").map((a) => a.tf);
+  const neutralTFs = analyses.filter((a) => a.direction === "neutral").map((a) => a.tf);
   const fresh = signals.filter((s) => s.kind.startsWith("ema-cross"));
   const bursts = signals.filter((s) => s.kind.startsWith("momentum"));
   const fades = signals.filter((s) => s.kind.startsWith("atr-fade"));
 
-  if (dominant === "neutral") {
-    return `No scalp edge — TFs are mixed. Bull: ${bullTFs.join(", ") || "none"}. Bear: ${bearTFs.join(", ") || "none"}. Sit out and wait for a clean EMA9/21 cross with momentum.`;
+  const emaTangled = analyses.filter((a) => Math.abs(a.ema9 - a.ema21) < a.atr * 0.3);
+  const tangledTFs = emaTangled.map((a) => a.tf);
+  const deadVol = analyses.filter((a) => a.atrPct < 0.1);
+  const deadTFs = deadVol.map((a) => a.tf);
+  const noFresh = fresh.length === 0;
+  const noBursts = bursts.length === 0;
+
+  const chopScore = (tangledTFs.length >= 3 ? 1 : 0) + (deadTFs.length >= 3 ? 1 : 0) + (noFresh ? 1 : 0) + (noBursts ? 1 : 0) + (neutralTFs.length >= 3 ? 1 : 0) + (confidence < 50 ? 1 : 0);
+
+  if (dominant === "neutral" || chopScore >= 3) {
+    const reasons: string[] = [];
+    if (tangledTFs.length > 0) reasons.push(`EMA9/21 tangled on ${tangledTFs.join(", ")} (no separation = no trend)`);
+    if (deadTFs.length > 0) reasons.push(`vol dead on ${deadTFs.join(", ")} (${deadVol[0]?.atrPct.toFixed(2)}% ATR — not enough range)`);
+    if (noFresh) reasons.push("no fresh EMA9/21 cross");
+    if (noBursts) reasons.push("no momentum bursts");
+    if (neutralTFs.length >= 3) reasons.push(`${neutralTFs.length}/${analyses.length} TFs neutral`);
+    const reasonText = reasons.length > 0 ? `: ${reasons.join(", ")}` : "";
+    return `⚠️ CHOP ZONE — don't trade right now${reasonText}. Bull: ${bullTFs.join(", ") || "none"}. Bear: ${bearTFs.join(", ") || "none"}. Sit on your hands until EMA9/21 separates cleanly on at least 3 TFs with rising volume. Scalping chop = death by a thousand cuts.`;
   }
 
   const dirAdj = dominant === "bull" ? "long" : "short";
@@ -271,7 +288,7 @@ function composeScalpAdvisor(
   }
 
   if (bursts.length > 0) {
-    parts.push(`Momentum burst on ${bursts.map((s) => s.tf).join(", ")} — ${dirAdj === "long" ? "ride it but don't add late." : "ride it but don't add late."}`);
+    parts.push(`Momentum burst on ${bursts.map((s) => s.tf).join(", ")} — ride it but don't add late.`);
   }
 
   if (fades.length > 0) {
@@ -281,8 +298,9 @@ function composeScalpAdvisor(
   const hotVol = analyses.filter((a) => a.atrPct > 0.4).map((a) => a.tf);
   if (hotVol.length > 0) parts.push(`Vol is hot on ${hotVol.join(", ")} — size down, spreads will be wider.`);
 
-  const deadVol = analyses.filter((a) => a.atrPct < 0.1).map((a) => a.tf);
-  if (deadVol.length > 0) parts.push(`Vol is dead on ${deadVol.join(", ")} — not enough range to scalp, skip those TFs.`);
+  if (deadVol.length > 0 && deadTFs.length < 3) parts.push(`Vol is dead on ${deadTFs.join(", ")} — skip those TFs.`);
+
+  if (tangledTFs.length > 0 && tangledTFs.length < 3) parts.push(`EMA9/21 tangled on ${tangledTFs.join(", ")} — those TFs are choppy, only trade the ones with clean separation.`);
 
   return parts.join(" ");
 }
