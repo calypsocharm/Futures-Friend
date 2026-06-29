@@ -7,6 +7,7 @@ export type Timeframe =
   | "4H"
   | "1H"
   | "30m"
+  | "15m"
   | "10m"
   | "5m"
   | "3m"
@@ -20,6 +21,7 @@ export const TIMEFRAMES: Timeframe[] = [
   "4H",
   "1H",
   "30m",
+  "15m",
   "10m",
   "5m",
   "3m",
@@ -34,12 +36,23 @@ export const TIMEFRAME_LABELS: Record<Timeframe, string> = {
   "4H": "4 Hour",
   "1H": "1 Hour",
   "30m": "30 Min",
+  "15m": "15 Min",
   "10m": "10 Min",
   "5m": "5 Min",
   "3m": "3 Min",
   "1m": "1 Min",
   "30s": "30 Sec",
 };
+
+export const SCALP_TIMEFRAMES: Timeframe[] = [
+  "30m",
+  "15m",
+  "10m",
+  "5m",
+  "3m",
+  "1m",
+  "30s",
+];
 
 export interface Bar {
   time: number;

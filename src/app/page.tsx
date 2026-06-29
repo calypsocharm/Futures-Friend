@@ -16,6 +16,7 @@ import { ChartPanel } from "@/components/ChartPanel";
 import { BacktestPanel } from "@/components/BacktestPanel";
 import { WatchlistPanel } from "@/components/WatchlistPanel";
 import { AlertsPanel } from "@/components/AlertsPanel";
+import Link from "next/link";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import { useWatchlist } from "@/store/watchlist";
 import { symbolDef } from "@/lib/symbols";
@@ -67,6 +68,12 @@ export default function Page() {
           </div>
           <h1 className="text-lg font-bold">Trend &amp; Flow Adviser</h1>
         </div>
+        <Link
+          href="/scalp"
+          className="rounded-md border border-[var(--border)] bg-[var(--bg-panel-2)] px-3 py-1.5 text-xs text-center text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--neutral)]"
+        >
+          → Scalping Friend
+        </Link>
         <SymbolPicker />
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-panel-2)] p-3 text-xs">
           <div className="flex items-center justify-between">

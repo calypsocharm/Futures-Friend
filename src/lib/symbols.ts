@@ -78,6 +78,8 @@ export function yahooSpec(tf: Timeframe): YahooFetchSpec {
       return { yahooInterval: "60m", range: "1mo" };
     case "30m":
       return { yahooInterval: "30m", range: "5d" };
+    case "15m":
+      return { yahooInterval: "5m", range: "5d", aggregate: 3 };
     case "10m":
       return { yahooInterval: "5m", range: "5d", aggregate: 2 };
     case "5m":
