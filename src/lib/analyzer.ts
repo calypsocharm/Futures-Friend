@@ -148,21 +148,61 @@ function composeAdvisor(
   const highTimeframes = ["1M", "1W", "1D"];
   const high = analyses.filter((a) => highTimeframes.includes(a.timeframe));
   const highAgree = high.length > 0 && high.every((a) => a.direction === dominant);
+  const ref = analyses[0];
+  const rsi = ref?.rsi ?? 50;
+  const flow = ref?.flow ?? "range";
+  const structure = ref?.structure ?? "ranging";
+  const overbought = rsi > 70;
+  const oversold = rsi < 30;
+  const chop = dominant === "neutral" || (flow === "range" && structure === "ranging");
+  const strongFlow = flow === "strong";
+  const bull = dominant === "bull";
+  const bear = dominant === "bear";
 
   if (dominant === "neutral") {
-    return "Market is in conflict across timeframes. No clean directional bias. Consider standing aside or trading the range with reduced size until higher timeframes realign.";
+    if (chop) {
+      const parts = ["Market's in chop — timeframes are fighting and there's no clean edge."];
+      if (structure === "ranging") parts.push("Stay out of the middle. If you must trade, fade the extremes with small size and tight stops.");
+      else parts.push("Sit on your hands until the higher timeframes realign. Better to miss the move than catch a knife.");
+      if (analyses.some((a) => a.rsi > 75 || a.rsi < 25)) parts.push("RSI is hitting extremes on some TFs — wait for a confirmed break or a clean reclaim before doing anything.");
+      return parts.join(" ");
+    }
+    return "No clean bias right now. Patience pays — wait for timeframes to line up before risking capital.";
   }
 
-  const dirWord = dominant === "bull" ? "long/buy" : "short/sell";
-  const dirAdj = dominant === "bull" ? "bullish" : "bearish";
+  const dirAdj = bull ? "bullish" : "bearish";
+  const action = bull ? "stay long and buy the dips" : "stay short and sell the rips";
+  const entryCue = bull ? "pullbacks into EMA20" : "rallies into EMA20";
 
   if (confidence >= 70 && highAgree) {
-    return `Strong ${dirAdj} confluence (${confidence}% of timeframes agree, higher timeframes aligned). Bias toward ${dirWord} setups. Look for pullbacks into EMA20 on lower timeframes for entries in the direction of ${dominant === "bull" ? "uptrend" : "downtrend"}.`;
+    const parts = [`Strong ${dirAdj} alignment — ${confidence}% of timeframes agree and the higher TFs are lined up.`];
+    parts.push(`${capitalize(action)} — that's the play.`);
+    if (strongFlow) parts.push(`Flow is confirming on the lower TFs, so don't fight it.`);
+    if (overbought && bull) parts.push(`RSI ${rsi.toFixed(0)} is a bit hot though, so don't chase the move — wait for a ${entryCue} to add.`);
+    else if (oversold && bear) parts.push(`RSI ${rsi.toFixed(0)} is washed out though, so don't pile in here — wait for a ${entryCue} to add.`);
+    else parts.push(`Look for ${entryCue} on the lower timeframes for entries.`);
+    return parts.join(" ");
   }
+
   if (confidence >= 60) {
-    return `Moderate ${dirAdj} bias (${confidence}% agreement). Higher timeframes are mixed. Favor ${dirWord} only on high-quality setups; reduce size and tighten risk until alignment improves.`;
+    const parts = [`${capitalize(dirAdj)} lean (${confidence}%), but the higher TFs aren't all on board yet.`];
+    parts.push(`Bias toward ${bull ? "longs" : "shorts"}, but keep size light and stops tight until they align.`);
+    if (!strongFlow) parts.push(`Flow is mixed on the lower TFs — only take clean setups, don't force it.`);
+    return parts.join(" ");
   }
-  return `Weak ${dirAdj} lean (${confidence}% agreement). Timeframes are split. Patience is advised — wait for clearer confluence before committing capital ${dirWord}.`;
+
+  if (confidence >= 45) {
+    const parts = [`Weak ${dirAdj} lean (${confidence}%) — timeframes are split.`];
+    parts.push(`If you ${bull ? "buy" : "sell"}, do it small and only on a high-quality setup. No ${action.split(" and ")[1]} yet.`);
+    if (chop) parts.push(`Honestly this looks choppy — sitting out is a valid position.`);
+    return parts.join(" ");
+  }
+
+  return `Timeframes are too split to have conviction (${confidence}%). Sit out the chop and wait for a cleaner read.`;
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function aggregateKeyLevels(analyses: TimeframeAnalysis[]): KeyLevel[] {

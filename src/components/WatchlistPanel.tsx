@@ -3,7 +3,8 @@
 import { useAnalysis } from "@/store/analysis";
 import { useWatchlist } from "@/store/watchlist";
 import { SYMBOLS, symbolDef } from "@/lib/symbols";
-import type { Direction } from "@/lib/types";
+import type { Direction, Timeframe } from "@/lib/types";
+import { TIMEFRAMES, TIMEFRAME_LABELS } from "@/lib/types";
 
 const DIR_COLOR: Record<Direction, string> = {
   bull: "var(--bull)",
@@ -17,6 +18,8 @@ export function WatchlistPanel() {
   const watchlist = useWatchlist((s) => s.watchlist);
   const items = useWatchlist((s) => s.items);
   const toggle = useWatchlist((s) => s.toggle);
+  const watchTF = useWatchlist((s) => s.watchTF);
+  const setWatchTF = useWatchlist((s) => s.setWatchTF);
   const setSymbol = useAnalysis((s) => s.setSymbol);
   const current = useAnalysis((s) => s.symbol);
 
@@ -24,9 +27,23 @@ export function WatchlistPanel() {
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-4">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-        Watchlist ({watchlist.length})
-      </h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+          Watchlist ({watchlist.length})
+        </h2>
+        <select
+          value={watchTF}
+          onChange={(e) => setWatchTF(e.target.value as Timeframe)}
+          className="rounded-md border border-[var(--border)] bg-[var(--bg-panel-2)] px-2 py-0.5 text-[10px]"
+          title="Timeframe used for watchlist bias"
+        >
+          {TIMEFRAMES.map((t) => (
+            <option key={t} value={t}>
+              {TIMEFRAME_LABELS[t]}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="space-y-1.5">
         {watchlist.length === 0 && (
           <div className="text-xs text-[var(--text-muted)]">No symbols pinned yet.</div>

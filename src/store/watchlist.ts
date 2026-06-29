@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Direction } from "@/lib/types";
+import type { Direction, Timeframe } from "@/lib/types";
 
 export interface WatchlistItem {
   symbol: string;
@@ -29,6 +29,7 @@ interface WatchlistState {
   alerts: Alert[];
   autoRefresh: boolean;
   intervalSec: number;
+  watchTF: Timeframe;
   toggle: (symbol: string) => void;
   setItem: (item: WatchlistItem) => void;
   addAlert: (alert: Omit<Alert, "id" | "at" | "seen">) => void;
@@ -36,6 +37,7 @@ interface WatchlistState {
   clearAlerts: () => void;
   setAutoRefresh: (v: boolean) => void;
   setIntervalSec: (s: number) => void;
+  setWatchTF: (tf: Timeframe) => void;
 }
 
 export const useWatchlist = create<WatchlistState>()(
@@ -46,6 +48,7 @@ export const useWatchlist = create<WatchlistState>()(
       alerts: [],
       autoRefresh: true,
       intervalSec: 60,
+      watchTF: "1H",
       toggle: (symbol) => {
         const wl = get().watchlist;
         const next = wl.includes(symbol)
@@ -75,6 +78,7 @@ export const useWatchlist = create<WatchlistState>()(
       clearAlerts: () => set({ alerts: [] }),
       setAutoRefresh: (v) => set({ autoRefresh: v }),
       setIntervalSec: (s) => set({ intervalSec: s }),
+      setWatchTF: (tf) => set({ watchTF: tf }),
     }),
     {
       name: "futures-friend-watchlist",
@@ -82,6 +86,7 @@ export const useWatchlist = create<WatchlistState>()(
         watchlist: s.watchlist,
         autoRefresh: s.autoRefresh,
         intervalSec: s.intervalSec,
+        watchTF: s.watchTF,
       }),
     }
   )

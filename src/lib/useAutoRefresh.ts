@@ -4,40 +4,36 @@ import { useEffect, useRef } from "react";
 import { useAnalysis } from "@/store/analysis";
 import { useWatchlist } from "@/store/watchlist";
 import { symbolDef } from "@/lib/symbols";
+import type { Timeframe } from "@/lib/types";
 
-const TF_FOR_WATCH: ("1D" | "4H" | "1H")[] = ["1D", "4H", "1H"];
-
-async function fetchSummary(symbol: string): Promise<{ direction: string; confidence: number; lastPrice: number } | null> {
+async function fetchSummary(symbol: string, tf: Timeframe): Promise<{ direction: string; confidence: number; lastPrice: number } | null> {
   try {
-    const results = await Promise.all(
-      TF_FOR_WATCH.map(async (tf) => {
-        const res = await fetch(`/api/bars?symbol=${encodeURIComponent(symbol)}&tf=${tf}`, { cache: "no-store" });
-        if (!res.ok) return [];
-        const d = await res.json();
-        return (d.bars ?? []) as { close: number; time: number; open: number; high: number; low: number; volume?: number }[];
-      })
-    );
-    const closes = results.map((b) => b[b.length - 1]?.close ?? 0);
-    const lastPrice = closes[0] || 0;
-    if (lastPrice === 0) return null;
-
+    const res = await fetch(`/api/bars?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(tf)}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const d = await res.json();
+    const bars: { close: number; time: number; open: number; high: number; low: number; volume?: number }[] = d.bars ?? [];
+    if (bars.length < 5) return null;
+    const c = bars.map((b) => b.close);
+    const lastPrice = c[c.length - 1];
+    const ema = (arr: number[], p: number) => {
+      const k = 2 / (p + 1);
+      let v = arr[0];
+      for (let i = 1; i < arr.length; i++) v = arr[i] * k + v * (1 - k);
+      return v;
+    };
+    const e20 = ema(c.slice(-30), 20);
+    const e50 = ema(c.slice(-60), 50);
+    const e200 = c.length >= 200 ? ema(c.slice(-200), 200) : null;
     let bull = 0, bear = 0, neutral = 0;
-    for (const bars of results) {
-      if (bars.length < 5) { neutral++; continue; }
-      const c = bars.map((b) => b.close);
-      const last = c[c.length - 1];
-      const ema = (arr: number[], p: number) => {
-        const k = 2 / (p + 1);
-        let v = arr[0];
-        for (let i = 1; i < arr.length; i++) v = arr[i] * k + v * (1 - k);
-        return v;
-      };
-      const e20 = ema(c.slice(-30), 20);
-      const e50 = ema(c.slice(-60), 50);
-      if (e20 > e50 && last > e20) bull++;
-      else if (e20 < e50 && last < e20) bear++;
-      else neutral++;
+    if (e20 > e50 && lastPrice > e20) bull++;
+    else if (e20 < e50 && lastPrice < e20) bear++;
+    else neutral++;
+    if (e200) {
+      if (lastPrice > e200) bull++;
+      else bear++;
     }
+    if (c[c.length - 1] > c[c.length - 5]) bull++;
+    else bear++;
     let direction = "neutral";
     if (bull > bear && bull > neutral) direction = "bull";
     else if (bear > bull && bear > neutral) direction = "bear";
@@ -55,6 +51,7 @@ export function useAutoRefresh() {
   const report = useAnalysis((s) => s.report);
   const autoRefresh = useWatchlist((s) => s.autoRefresh);
   const intervalSec = useWatchlist((s) => s.intervalSec);
+  const watchTF = useWatchlist((s) => s.watchTF);
   const setItem = useWatchlist((s) => s.setItem);
   const watchlist = useWatchlist((s) => s.watchlist);
   const lastTick = useRef<number>(0);
@@ -73,7 +70,7 @@ export function useAutoRefresh() {
         });
         continue;
       }
-      const summary = await fetchSummary(sym);
+      const summary = await fetchSummary(sym, watchTF);
       if (summary) {
         setItem({
           symbol: sym,
