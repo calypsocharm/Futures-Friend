@@ -9,6 +9,7 @@ export interface ScalpSignal {
   bias: "long" | "short";
   atPrice: number;
   barIndex: number;
+  barsSinceCross: number;
   message: string;
 }
 
@@ -30,6 +31,15 @@ export interface ScalpTFAnalysis {
   notes: string[];
 }
 
+export interface ScalpTrigger {
+  status: "GO" | "WAIT" | "NO-GO";
+  action: string;
+  entry?: number;
+  stop?: number;
+  target?: number;
+  reason: string;
+}
+
 export interface ScalpReport {
   symbol: string;
   dominant: Direction;
@@ -41,6 +51,7 @@ export interface ScalpReport {
   signals: ScalpSignal[];
   advisor: string;
   plan: ScalpPlan;
+  trigger: ScalpTrigger;
 }
 
 export interface ScalpPlan {
@@ -133,6 +144,7 @@ export function detectScalpSignals(bars: Bar[], a: ScalpTFAnalysis): ScalpSignal
       bias: "long",
       atPrice: a.lastPrice,
       barIndex: last,
+      barsSinceCross: a.barsSinceCross,
       message: `${a.label}: EMA9 crossed ABOVE EMA21 ${a.barsSinceCross} bars ago — long trigger.`,
     });
   }
@@ -144,6 +156,7 @@ export function detectScalpSignals(bars: Bar[], a: ScalpTFAnalysis): ScalpSignal
       bias: "short",
       atPrice: a.lastPrice,
       barIndex: last,
+      barsSinceCross: a.barsSinceCross,
       message: `${a.label}: EMA9 crossed BELOW EMA21 ${a.barsSinceCross} bars ago — short trigger.`,
     });
   }
@@ -159,6 +172,7 @@ export function detectScalpSignals(bars: Bar[], a: ScalpTFAnalysis): ScalpSignal
       bias: "long",
       atPrice: a.lastPrice,
       barIndex: last,
+      barsSinceCross: -1,
       message: `${a.label}: 3 consecutive up bars — momentum burst long.`,
     });
   }
@@ -170,6 +184,7 @@ export function detectScalpSignals(bars: Bar[], a: ScalpTFAnalysis): ScalpSignal
       bias: "short",
       atPrice: a.lastPrice,
       barIndex: last,
+      barsSinceCross: -1,
       message: `${a.label}: 3 consecutive down bars — momentum burst short.`,
     });
   }
@@ -184,6 +199,7 @@ export function detectScalpSignals(bars: Bar[], a: ScalpTFAnalysis): ScalpSignal
       bias: "long",
       atPrice: a.lastPrice,
       barIndex: last,
+      barsSinceCross: -1,
       message: `${a.label}: Stretched ${extension.toFixed(2)} past 5-bar ref with RSI ${a.rsi.toFixed(0)} — fade long for a snapback.`,
     });
   }
@@ -195,6 +211,7 @@ export function detectScalpSignals(bars: Bar[], a: ScalpTFAnalysis): ScalpSignal
       bias: "short",
       atPrice: a.lastPrice,
       barIndex: last,
+      barsSinceCross: -1,
       message: `${a.label}: Stretched ${extension.toFixed(2)} past 5-bar ref with RSI ${a.rsi.toFixed(0)} — fade short for a snapback.`,
     });
   }
@@ -230,6 +247,7 @@ export function buildScalpReport(symbol: string, barsByTimeframe: Partial<Record
 
   const advisor = composeScalpAdvisor(dominant, confidence, perTimeframe, allSignals);
   const plan = buildScalpPlan(symbol, dominant, perTimeframe);
+  const trigger = buildScalpTrigger(dominant, confidence, perTimeframe, allSignals, plan);
 
   return {
     symbol,
@@ -242,7 +260,101 @@ export function buildScalpReport(symbol: string, barsByTimeframe: Partial<Record
     signals: allSignals.slice(0, 12),
     advisor,
     plan,
+    trigger,
   };
+}
+
+function buildScalpTrigger(
+  dominant: Direction,
+  confidence: number,
+  analyses: ScalpTFAnalysis[],
+  signals: ScalpSignal[],
+  plan: ScalpPlan
+): ScalpTrigger {
+  const fastTFs = ["5m", "3m", "1m", "30s"];
+  const fastAnalyses = analyses.filter((a) => fastTFs.includes(a.tf));
+  const fastAligned = fastAnalyses.filter((a) => a.direction === dominant);
+  const fastAlignedTFs = fastAligned.map((a) => a.tf);
+
+  const freshCrosses = signals.filter((s) => s.kind.startsWith("ema-cross") && s.barsSinceCross <= 2);
+  const freshOnFast = freshCrosses.filter((s) => fastTFs.includes(s.tf));
+
+  const deadVol = analyses.filter((a) => a.atrPct < 0.08);
+  const deadTFs = deadVol.map((a) => a.tf);
+  const tooDead = deadVol.length >= 4;
+
+  const tangled = analyses.filter((a) => Math.abs(a.ema9 - a.ema21) < a.atr * 0.25);
+  const tangledCount = tangled.length;
+  const neutralCount = analyses.filter((a) => a.direction === "neutral").length;
+
+  const splitTFs = confidence < 55 || dominant === "neutral";
+  const chopScore = (tangledCount >= 3 ? 1 : 0) + (neutralCount >= 4 ? 1 : 0) + (splitTFs ? 1 : 0) + (freshCrosses.length === 0 && splitTFs ? 1 : 0);
+
+  if (splitTFs && chopScore >= 2) {
+    return {
+      status: "NO-GO",
+      action: "CHOP — sit out",
+      reason: `TFs are split (${confidence}%, ${neutralCount}/${analyses.length} neutral) and ${tangledCount} TFs have tangled EMAs. No clean edge. Don't trade.`,
+    };
+  }
+
+  if (tooDead) {
+    return {
+      status: "WAIT",
+      action: "WAIT — vol too thin",
+      reason: `ATR is below 0.08% on ${deadTFs.join(", ")} (${deadVol[0]?.atrPct.toFixed(3)}%). Range can't cover spread + commissions. Wait for vol to pick up.`,
+    };
+  }
+
+  if (freshOnFast.length > 0 && fastAligned.length >= 2 && confidence >= 60) {
+    const sig = freshOnFast[0];
+    const action = dominant === "bull" ? `LONG NOW @ ${fmt(plan.entry)}` : `SHORT NOW @ ${fmt(plan.entry)}`;
+    return {
+      status: "GO",
+      action,
+      entry: plan.entry,
+      stop: plan.stop,
+      target: plan.target1,
+      reason: `Fresh EMA9/21 ${sig.bias} cross on ${sig.tf} (${sig.barsSinceCross}b ago), ${fastAligned.length}/${fastTFs.length} fast TFs aligned ${dominant}, ${confidence}% confidence. Stop @ ${fmt(plan.stop)} (${plan.stopTicks}t). Target @ ${fmt(plan.target1)} (${plan.t1Ticks}t = +$${plan.t1Dollars}).`,
+    };
+  }
+
+  if (fastAligned.length >= 3 && confidence >= 70 && freshCrosses.length === 0) {
+    return {
+      status: "WAIT",
+      action: `WAIT — ${dominant === "bull" ? "long" : "short"} but no fresh trigger`,
+      reason: `${fastAlignedTFs.join(", ")} are aligned ${dominant} (${confidence}%) but no fresh EMA9/21 cross in the last 2 bars. Hold existing if in, don't start new. Wait for a pullback + fresh cross to enter.`,
+    };
+  }
+
+  if (freshOnFast.length > 0 && fastAligned.length < 2) {
+    return {
+      status: "WAIT",
+      action: `WAIT — cross but no confluence`,
+      reason: `Fresh cross on ${freshOnFast.map((s) => s.tf).join(", ")} but only ${fastAligned.length}/${fastTFs.length} fast TFs aligned. One TF flipping isn't a scalp — need at least 2 fast TFs agreeing. Wait for confirmation.`,
+    };
+  }
+
+  if (confidence < 60) {
+    return {
+      status: "WAIT",
+      action: "WAIT — bias too weak",
+      reason: `Only ${confidence}% bias across scalp TFs. Need 60%+ for a GO. Fast TFs aligned: ${fastAlignedTFs.join(", ") || "none"}. Wait for alignment to build.`,
+    };
+  }
+
+  return {
+    status: "WAIT",
+    action: "WAIT — no clean setup",
+    reason: `Bias is ${dominant} (${confidence}%) but no fresh trigger + no confluence on fast TFs. Sit tight until a clean EMA9/21 cross fires with at least 2 fast TFs aligned.`,
+  };
+}
+
+function fmt(n: number): string {
+  if (Math.abs(n) >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (Math.abs(n) >= 100) return n.toFixed(2);
+  if (Math.abs(n) >= 1) return n.toFixed(3);
+  return n.toFixed(5);
 }
 
 function composeScalpAdvisor(

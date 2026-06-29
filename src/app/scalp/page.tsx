@@ -5,6 +5,7 @@ import { useAnalysis } from "@/store/analysis";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import { useWatchlist } from "@/store/watchlist";
 import { buildScalpReport } from "@/lib/scalp";
+import type { ScalpReport } from "@/lib/scalp";
 import { SCALP_TIMEFRAMES, TIMEFRAME_LABELS } from "@/lib/types";
 import type { Direction } from "@/lib/types";
 import { SymbolPicker } from "@/components/SymbolPicker";
@@ -132,11 +133,11 @@ export default function ScalpPage() {
           </div>
         ) : (
           <>
+            {/* Trigger banner */}
+            <ScalpTriggerBanner trigger={report.trigger} />
+
             {/* Bias banner */}
-            <div
-              className="rounded-xl border p-5"
-              style={{ borderColor: DIR_COLOR[report.dominant], background: "var(--bg-panel)" }}
-            >
+            <div className="mt-4 rounded-xl border p-5" style={{ borderColor: DIR_COLOR[report.dominant], background: "var(--bg-panel)" }}>
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <div className="text-xs uppercase tracking-widest text-[var(--text-muted)]">
@@ -308,4 +309,67 @@ function fmt(n: number): string {
   if (Math.abs(n) >= 100) return n.toFixed(2);
   if (Math.abs(n) >= 1) return n.toFixed(3);
   return n.toFixed(5);
+}
+
+function ScalpTriggerBanner({ trigger }: { trigger: ScalpReport["trigger"] }) {
+  const STATUS_COLOR: Record<string, string> = {
+    GO: "var(--bull)",
+    WAIT: "var(--neutral)",
+    "NO-GO": "var(--bear)",
+  };
+  const STATUS_BG: Record<string, string> = {
+    GO: "rgba(38, 208, 124, 0.08)",
+    WAIT: "rgba(240, 180, 41, 0.06)",
+    "NO-GO": "rgba(255, 92, 92, 0.06)",
+  };
+  const c = STATUS_COLOR[trigger.status] ?? "var(--text-muted)";
+  const bg = STATUS_BG[trigger.status] ?? "var(--bg-panel)";
+  const big = trigger.status === "GO";
+
+  return (
+    <div
+      className="rounded-xl border p-5"
+      style={{ borderColor: c, background: bg }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div
+            className="rounded-lg px-4 py-2 text-2xl font-black"
+            style={{ background: c, color: "var(--bg)" }}
+          >
+            {trigger.status}
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-widest text-[var(--text-muted)]">
+              Scalp trigger
+            </div>
+            <div className={`font-bold ${big ? "text-2xl" : "text-lg"}`} style={{ color: c }}>
+              {trigger.action}
+            </div>
+          </div>
+        </div>
+        {trigger.entry != null && (
+          <div className="flex gap-4 text-sm">
+            <div className="rounded-md border border-[var(--neutral)] px-3 py-1.5" style={{ background: "var(--bg-panel-2)" }}>
+              <span className="text-[var(--text-muted)]">Entry </span>
+              <span className="font-mono font-bold">{fmt(trigger.entry)}</span>
+            </div>
+            {trigger.stop != null && (
+              <div className="rounded-md border border-[var(--bear)] px-3 py-1.5" style={{ background: "var(--bg-panel-2)" }}>
+                <span className="text-[var(--text-muted)]">Stop </span>
+                <span className="font-mono font-bold" style={{ color: "var(--bear)" }}>{fmt(trigger.stop)}</span>
+              </div>
+            )}
+            {trigger.target != null && (
+              <div className="rounded-md border border-[var(--bull)] px-3 py-1.5" style={{ background: "var(--bg-panel-2)" }}>
+                <span className="text-[var(--text-muted)]">T1 </span>
+                <span className="font-mono font-bold" style={{ color: "var(--bull)" }}>{fmt(trigger.target)}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <p className="mt-3 text-sm leading-relaxed text-[var(--text)]">{trigger.reason}</p>
+    </div>
+  );
 }
