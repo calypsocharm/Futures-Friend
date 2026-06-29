@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAnalysis } from "@/store/analysis";
 import { AdvisorBanner } from "@/components/AdvisorBanner";
 import { TimeframeCard } from "@/components/TimeframeCard";
@@ -13,6 +13,7 @@ import { RiskCalculator } from "@/components/RiskCalculator";
 import { SetupsPanel } from "@/components/SetupsPanel";
 import { GaugesPanel } from "@/components/GaugesPanel";
 import { ChartPanel } from "@/components/ChartPanel";
+import { BacktestPanel } from "@/components/BacktestPanel";
 import { WatchlistPanel } from "@/components/WatchlistPanel";
 import { AlertsPanel } from "@/components/AlertsPanel";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
@@ -33,6 +34,7 @@ export default function Page() {
   const intervalSec = useWatchlist((s) => s.intervalSec);
   const setIntervalSec = useWatchlist((s) => s.setIntervalSec);
   const setItem = useWatchlist((s) => s.setItem);
+  const [view, setView] = useState<"live" | "backtest">("live");
   const tfCount = Object.values(barsByTimeframe).filter((b) => b && b.length > 0).length;
 
   useAutoRefresh();
@@ -145,76 +147,107 @@ export default function Page() {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-6">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <AdvisorBanner />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
-            <WatchlistPanel />
-            <AlertsPanel />
-          </div>
+        <div className="mb-4 flex gap-2">
+          <button
+            onClick={() => setView("live")}
+            className="rounded-md px-3 py-1.5 text-xs font-semibold"
+            style={{
+              background: view === "live" ? "var(--neutral)" : "var(--bg-panel)",
+              color: view === "live" ? "var(--bg)" : "var(--text-muted)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            ● Live
+          </button>
+          <button
+            onClick={() => setView("backtest")}
+            className="rounded-md px-3 py-1.5 text-xs font-semibold"
+            style={{
+              background: view === "backtest" ? "var(--neutral)" : "var(--bg-panel)",
+              color: view === "backtest" ? "var(--bg)" : "var(--text-muted)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            ◀▶ Backtest
+          </button>
         </div>
 
-        {report && report.perTimeframe.length > 0 && (
-          <div className="mt-6">
-            <ChartPanel />
-          </div>
-        )}
+        {view === "backtest" ? (
+          <BacktestPanel />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <AdvisorBanner />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                <WatchlistPanel />
+                <AlertsPanel />
+              </div>
+            </div>
 
-        {report && report.matrix.length > 0 && (
-          <div className="mt-6">
-            <ConfluenceMatrix rows={report.matrix} />
-          </div>
-        )}
-
-        {report && report.tradePlan && (
-          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <TradePlanPanel plan={report.tradePlan} />
-            <RiskCalculator plan={report.tradePlan} />
-          </div>
-        )}
-
-        {report && (report.setups.length > 0 || report.keyLevels.length > 0) && (
-          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <SetupsPanel setups={report.setups} />
-            {report.perTimeframe[0] && (
-              <KeyLevelsPanel levels={report.keyLevels} lastPrice={report.perTimeframe[0].lastPrice} />
+            {report && report.perTimeframe.length > 0 && (
+              <div className="mt-6">
+                <ChartPanel />
+              </div>
             )}
-          </div>
-        )}
 
-        {report && report.gauges.length > 0 && (
-          <div className="mt-6">
-            <GaugesPanel gauges={report.gauges} />
-          </div>
-        )}
+            {report && report.matrix.length > 0 && (
+              <div className="mt-6">
+                <ConfluenceMatrix rows={report.matrix} />
+              </div>
+            )}
 
-        <div className="mt-6">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-            Timeframe ladder
-          </h2>
-          {report && report.perTimeframe.length > 0 ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {report.perTimeframe.map((a) => (
-                <TimeframeCard key={a.timeframe} a={a} />
-              ))}
+            {report && report.tradePlan && (
+              <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <TradePlanPanel plan={report.tradePlan} />
+                <RiskCalculator plan={report.tradePlan} />
+              </div>
+            )}
+
+            {report && (report.setups.length > 0 || report.keyLevels.length > 0) && (
+              <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <SetupsPanel setups={report.setups} />
+                {report.perTimeframe[0] && (
+                  <KeyLevelsPanel levels={report.keyLevels} lastPrice={report.perTimeframe[0].lastPrice} />
+                )}
+              </div>
+            )}
+
+            {report && report.gauges.length > 0 && (
+              <div className="mt-6">
+                <GaugesPanel gauges={report.gauges} />
+              </div>
+            )}
+
+            <div className="mt-6">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                Timeframe ladder
+              </h2>
+              {report && report.perTimeframe.length > 0 ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {report.perTimeframe.map((a) => (
+                    <TimeframeCard key={a.timeframe} a={a} />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--text-muted)]">
+                  {loading ? `Fetching live data for ${symbol}…` : `No data loaded for ${symbol}. Hit Refresh.`}
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--text-muted)]">
-              {loading ? `Fetching live data for ${symbol}…` : `No data loaded for ${symbol}. Hit Refresh.`}
-            </div>
-          )}
-        </div>
 
-        {report && (
-          <div className="mt-6 rounded-lg border border-[var(--border)] bg-[var(--bg-panel)] p-4 text-xs text-[var(--text-muted)]">
-            <span className="text-[var(--text)]">Loaded bars: </span>
-            {Object.entries(barsByTimeframe).map(([tf, bars]) => (
-              <span key={tf} className="mr-3 inline-block">
-                {tf}: {bars?.length ?? 0}
-              </span>
-            ))}
-          </div>
+            {report && (
+              <div className="mt-6 rounded-lg border border-[var(--border)] bg-[var(--bg-panel)] p-4 text-xs text-[var(--text-muted)]">
+                <span className="text-[var(--text)]">Loaded bars: </span>
+                {Object.entries(barsByTimeframe).map(([tf, bars]) => (
+                  <span key={tf} className="mr-3 inline-block">
+                    {tf}: {bars?.length ?? 0}
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>

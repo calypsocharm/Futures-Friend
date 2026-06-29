@@ -13,6 +13,14 @@ interface Props {
   swingLow?: number | null;
   divergences?: Divergence[];
   barOffset?: number;
+  plan?: {
+    entryZone: { low: number; high: number };
+    stop: number;
+    target1: number;
+    target2: number;
+    target3: number;
+    bias: "bull" | "bear" | "neutral";
+  };
   height?: number;
 }
 
@@ -23,7 +31,7 @@ const PAD_T = 10;
 const PAD_B = 18;
 const VOL_H = 40;
 
-export function CandleChart({ bars, ema20, ema50, ema200, swingHigh, swingLow, divergences, barOffset = 0, height = 360 }: Props) {
+export function CandleChart({ bars, ema20, ema50, ema200, swingHigh, swingLow, divergences, barOffset = 0, plan, height = 360 }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -233,6 +241,35 @@ export function CandleChart({ bars, ema20, ema50, ema200, swingHigh, swingLow, d
               </g>
             );
           });
+        })()}
+
+        {/* Trade plan levels */}
+        {plan && plan.bias !== "neutral" && (() => {
+          const BIAS_COLOR = plan.bias === "bull" ? "var(--bull)" : "var(--bear)";
+          const TGT_COLOR = "#5ad1c4";
+          const STOP_COLOR = "var(--bear)";
+          const lines: React.ReactNode[] = [];
+          const draw = (val: number, color: string, label: string, dash: string, op: number, key: string) => {
+            const yp = y(val);
+            return (
+              <g key={key}>
+                <line x1={PAD_L} x2={W - PAD_R} y1={yp} y2={yp} stroke={color} strokeOpacity={op} strokeDasharray={dash} strokeWidth="1" />
+                <rect x={W - PAD_R} y={yp - 8} width={PAD_R} height={16} fill={color} fillOpacity="0.85" />
+                <text x={W - PAD_R + 4} y={yp + 4} fill="var(--bg)" fontSize="9" fontFamily="ui-monospace, monospace" fontWeight="bold">
+                  {label}
+                </text>
+              </g>
+            );
+          };
+          lines.push(draw(plan.entryZone.high, BIAS_COLOR, "E", "4 2", 0.6, "entryHi"));
+          if (plan.entryZone.low !== plan.entryZone.high) {
+            lines.push(draw(plan.entryZone.low, BIAS_COLOR, "E", "4 2", 0.6, "entryLo"));
+          }
+          lines.push(draw(plan.stop, STOP_COLOR, "SL", "6 2", 0.7, "stop"));
+          lines.push(draw(plan.target1, TGT_COLOR, "T1", "3 2", 0.6, "t1"));
+          lines.push(draw(plan.target2, TGT_COLOR, "T2", "3 2", 0.5, "t2"));
+          lines.push(draw(plan.target3, TGT_COLOR, "T3", "3 2", 0.4, "t3"));
+          return <g>{lines}</g>;
         })()}
 
         {/* last price line */}

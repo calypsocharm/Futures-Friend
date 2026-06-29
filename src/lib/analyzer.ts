@@ -225,6 +225,34 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+export function replayAt(bars: Bar[], untilIndex: number, label = ""): {
+  direction: Direction;
+  confidence: number;
+  advisor: string;
+  rsi: number;
+  ema20: number;
+  ema50: number;
+  lastPrice: number;
+  bars: number;
+} {
+  const slice = bars.slice(0, untilIndex + 1);
+  if (slice.length < 5) {
+    return { direction: "neutral", confidence: 0, advisor: "Not enough bars yet.", rsi: 50, ema20: 0, ema50: 0, lastPrice: slice[slice.length - 1]?.close ?? 0, bars: slice.length };
+  }
+  const a = analyzeTimeframe("1D", slice);
+  const report = buildConfluenceReport(label || "REPLAY", { "1D": slice });
+  return {
+    direction: report.dominant,
+    confidence: report.confidence,
+    advisor: report.advisor,
+    rsi: a.rsi,
+    ema20: a.ema20,
+    ema50: a.ema50,
+    lastPrice: a.lastPrice,
+    bars: slice.length,
+  };
+}
+
 function aggregateKeyLevels(analyses: TimeframeAnalysis[]): KeyLevel[] {
   const map = new Map<number, { type: "resistance" | "support"; tfs: Set<Timeframe> }>();
   for (const a of analyses) {

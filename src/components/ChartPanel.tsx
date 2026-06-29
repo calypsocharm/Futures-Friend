@@ -81,6 +81,7 @@ export function ChartPanel() {
             swingLow={swings.low}
             divergences={divergences}
             barOffset={bars.length - slice.length}
+            plan={report?.tradePlan}
             height={380}
           />
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--text-muted)]">
