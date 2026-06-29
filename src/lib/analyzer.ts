@@ -168,26 +168,40 @@ function composeAdvisor(
   const highTimeframes = ["1M", "1W", "1D"];
   const high = analyses.filter((a) => highTimeframes.includes(a.timeframe));
   const highAgree = high.length > 0 && high.every((a) => a.direction === dominant);
+  const highConflict = high.filter((a) => a.direction !== dominant).map((a) => `${a.label} (${a.direction})`);
+  const bullTFs = analyses.filter((a) => a.direction === "bull").map((a) => a.timeframe);
+  const bearTFs = analyses.filter((a) => a.direction === "bear").map((a) => a.timeframe);
+  const neutralTFs = analyses.filter((a) => a.direction === "neutral").map((a) => a.timeframe);
+
   const ref = analyses[0];
-  const rsi = ref?.rsi ?? 50;
   const flow = ref?.flow ?? "range";
   const structure = ref?.structure ?? "ranging";
-  const overbought = rsi > 70;
-  const oversold = rsi < 30;
+
+  const rsiExtremeTF = analyses.find((a) => a.rsi > 70 || a.rsi < 30);
+  const rsiExtreme = rsiExtremeTF ? `${rsiExtremeTF.label} RSI ${rsiExtremeTF.rsi.toFixed(0)}` : null;
+  const overbought = rsiExtremeTF ? rsiExtremeTF.rsi > 70 : false;
+  const oversold = rsiExtremeTF ? rsiExtremeTF.rsi < 30 : false;
+
+  const strongFlowTFs = analyses.filter((a) => a.flow === "strong").map((a) => a.timeframe);
+  const weakFlowTFs = analyses.filter((a) => a.flow === "weak").map((a) => a.timeframe);
   const chop = dominant === "neutral" || (flow === "range" && structure === "ranging");
-  const strongFlow = flow === "strong";
   const bull = dominant === "bull";
   const bear = dominant === "bear";
 
+  const bullList = bullTFs.length > 0 ? bullTFs.join(", ") : "none";
+  const bearList = bearTFs.length > 0 ? bearTFs.join(", ") : "none";
+  const neutralList = neutralTFs.length > 0 ? neutralTFs.join(", ") : "none";
+
   if (dominant === "neutral") {
     if (chop) {
-      const parts = ["Market's in chop — timeframes are fighting and there's no clean edge."];
-      if (structure === "ranging") parts.push("Stay out of the middle. If you must trade, fade the extremes with small size and tight stops.");
-      else parts.push("Sit on your hands until the higher timeframes realign. Better to miss the move than catch a knife.");
-      if (analyses.some((a) => a.rsi > 75 || a.rsi < 25)) parts.push("RSI is hitting extremes on some TFs — wait for a confirmed break or a clean reclaim before doing anything.");
+      const parts = [`Market's in chop — timeframes are fighting and there's no clean edge.`];
+      parts.push(`Bull: ${bullList}. Bear: ${bearList}. Neutral: ${neutralList}.`);
+      if (structure === "ranging") parts.push(`Stay out of the middle. If you must trade, fade the extremes with small size and tight stops.`);
+      else parts.push(`Sit on your hands until ${highConflict.length > 0 ? highConflict.join(", ") + " realign" : "the higher TFs realign"}. Better to miss the move than catch a knife.`);
+      if (rsiExtreme) parts.push(`${rsiExtreme} is hitting an extreme — wait for a confirmed break or a clean reclaim before doing anything.`);
       return parts.join(" ");
     }
-    return "No clean bias right now. Patience pays — wait for timeframes to line up before risking capital.";
+    return `No clean bias right now. Bull: ${bullList}. Bear: ${bearList}. Patience pays — wait for timeframes to line up before risking capital.`;
   }
 
   const dirAdj = bull ? "bullish" : "bearish";
@@ -195,30 +209,37 @@ function composeAdvisor(
   const entryCue = bull ? "pullbacks into EMA20" : "rallies into EMA20";
 
   if (confidence >= 70 && highAgree) {
-    const parts = [`Strong ${dirAdj} alignment — ${confidence}% of timeframes agree and the higher TFs are lined up.`];
+    const parts = [`Strong ${dirAdj} alignment — ${confidence}% of timeframes agree.`];
     parts.push(`${capitalize(action)} — that's the play.`);
-    if (strongFlow) parts.push(`Flow is confirming on the lower TFs, so don't fight it.`);
-    if (overbought && bull) parts.push(`RSI ${rsi.toFixed(0)} is a bit hot though, so don't chase the move — wait for a ${entryCue} to add.`);
-    else if (oversold && bear) parts.push(`RSI ${rsi.toFixed(0)} is washed out though, so don't pile in here — wait for a ${entryCue} to add.`);
-    else parts.push(`Look for ${entryCue} on the lower timeframes for entries.`);
+    if (strongFlowTFs.length > 0) {
+      parts.push(`Flow is confirming on ${strongFlowTFs.join(", ")}${weakFlowTFs.length > 0 ? ` (weaker on ${weakFlowTFs.join(", ")})` : ""}, so don't fight it.`);
+    }
+    if (overbought && bull) {
+      parts.push(`${rsiExtreme} is a bit hot though, so don't chase the move — wait for a ${entryCue} on 1H/30m/5m to add.`);
+    } else if (oversold && bear) {
+      parts.push(`${rsiExtreme} is washed out though, so don't pile in here — wait for a ${entryCue} on 1H/30m/5m to add.`);
+    } else {
+      parts.push(`Look for ${entryCue} on the lower timeframes (1H, 30m, 5m) for entries.`);
+    }
+    if (bearTFs.length > 0) parts.push(`Still fighting ${bearList} — keep stops beyond those swings.`);
     return parts.join(" ");
   }
 
   if (confidence >= 60) {
-    const parts = [`${capitalize(dirAdj)} lean (${confidence}%), but the higher TFs aren't all on board yet.`];
+    const parts = [`${capitalize(dirAdj)} lean (${confidence}%), but ${highConflict.length > 0 ? highConflict.join(", ") + " aren't on board yet" : "the higher TFs aren't all on board yet"}.`];
     parts.push(`Bias toward ${bull ? "longs" : "shorts"}, but keep size light and stops tight until they align.`);
-    if (!strongFlow) parts.push(`Flow is mixed on the lower TFs — only take clean setups, don't force it.`);
+    if (weakFlowTFs.length > 0 && strongFlowTFs.length === 0) parts.push(`Flow is mixed (${weakFlowTFs.join(", ")} weak) — only take clean setups, don't force it.`);
     return parts.join(" ");
   }
 
   if (confidence >= 45) {
-    const parts = [`Weak ${dirAdj} lean (${confidence}%) — timeframes are split.`];
+    const parts = [`Weak ${dirAdj} lean (${confidence}%) — timeframes are split. Bull: ${bullList}. Bear: ${bearList}.`];
     parts.push(`If you ${bull ? "buy" : "sell"}, do it small and only on a high-quality setup. No ${action.split(" and ")[1]} yet.`);
     if (chop) parts.push(`Honestly this looks choppy — sitting out is a valid position.`);
     return parts.join(" ");
   }
 
-  return `Timeframes are too split to have conviction (${confidence}%). Sit out the chop and wait for a cleaner read.`;
+  return `Timeframes are too split to have conviction (${confidence}%). Bull: ${bullList}. Bear: ${bearList}. Sit out the chop and wait for a cleaner read.`;
 }
 
 function capitalize(s: string): string {
