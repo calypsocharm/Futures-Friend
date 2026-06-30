@@ -92,9 +92,10 @@ export function analyzeScalpTF(tf: Timeframe, bars: Bar[]): ScalpTFAnalysis {
   const atrPct = lastPrice > 0 ? (atrVal / lastPrice) * 100 : 0;
   const rsiVal = rsi(closes, 14);
 
-  let direction: Direction = "neutral";
-  if (ema9 > ema21 && lastPrice > ema9) direction = "bull";
-  else if (ema9 < ema21 && lastPrice < ema9) direction = "bear";
+  // EMA cross direction (confirmation only, lowest priority)
+  let emaDirection: Direction = "neutral";
+  if (ema9 > ema21 && lastPrice > ema9) emaDirection = "bull";
+  else if (ema9 < ema21 && lastPrice < ema9) emaDirection = "bear";
 
   const last5 = bars.slice(-5);
   const recentChange = last5.length === 5 ? last5[4].close - last5[0].open : 0;
@@ -103,14 +104,6 @@ export function analyzeScalpTF(tf: Timeframe, bars: Bar[]): ScalpTFAnalysis {
   const dropping = recentChange < -atrVal * 0.5 || recentReds >= 4;
   const spiking = recentChange > atrVal * 0.5 || recentGreens >= 4;
 
-  if (direction === "bull" && dropping) {
-    direction = recentReds >= 4 ? "bear" : "neutral";
-  }
-  if (direction === "bear" && spiking) {
-    direction = recentGreens >= 4 ? "bull" : "neutral";
-  }
-
-  // --- Indicator overrides (faster than lagging EMAs) ---
   const overrideReasons: string[] = [];
   let stDirection: "bull" | "bear" | "neutral" = "neutral";
   let stFlipped = false;
@@ -118,7 +111,32 @@ export function analyzeScalpTF(tf: Timeframe, bars: Bar[]): ScalpTFAnalysis {
   let recentDiamondFlag = false;
   let mrExtreme: "low" | "high" | "none" = "none";
 
-  // SuperTrend override
+  // === PRIORITY 1: Stop-hunt diamond (highest — catches reversals fastest) ===
+  if (bars.length >= 50) {
+    const stArrForDiamond = computeAdaptiveSuperTrend(bars);
+    const diamonds = detectStopHunts(bars, stArrForDiamond);
+    const recentDiamondSig = diamonds[diamonds.length - 1];
+    if (recentDiamondSig && bars.length - 1 - recentDiamondSig.index <= 5) {
+      if (recentDiamondSig.inRedArea) {
+        recentDiamondFlag = true;
+        overrideReasons.push(`Stop-hunt diamond ${bars.length - 1 - recentDiamondSig.index} bars ago in red zone — liquidity grab + reclaim, bounce detected. THIS LEADS.`);
+      }
+    }
+  }
+
+  // === PRIORITY 2: Mean reversion extreme (snapback) ===
+  if (bars.length >= 30) {
+    const mr = analyzeMeanReversion(bars);
+    if (mr.regime === "extreme-low" && mr.currentZ <= -2) {
+      mrExtreme = "low";
+      overrideReasons.push(`Mean reversion: Z-score ${mr.currentZ.toFixed(2)} (extreme low) — snapback long. THIS LEADS.`);
+    } else if (mr.regime === "extreme-high" && mr.currentZ >= 2) {
+      mrExtreme = "high";
+      overrideReasons.push(`Mean reversion: Z-score ${mr.currentZ.toFixed(2)} (extreme high) — snapback short. THIS LEADS.`);
+    }
+  }
+
+  // === PRIORITY 3: SuperTrend (trend regime — primary direction source) ===
   if (bars.length >= 30) {
     const stArr = computeAdaptiveSuperTrend(bars);
     const lastST = stArr[stArr.length - 1];
@@ -128,55 +146,52 @@ export function analyzeScalpTF(tf: Timeframe, bars: Bar[]): ScalpTFAnalysis {
       if (lastST.isGreen && prevST.isRed) {
         stFlipped = true;
         stFlipDirection = "up";
-        direction = "bull";
-        overrideReasons.push("SuperTrend flipped RED→GREEN (trend up) — override to bull.");
+        overrideReasons.push("SuperTrend flipped RED→GREEN — trend up. THIS LEADS.");
       } else if (lastST.isRed && prevST.isGreen) {
         stFlipped = true;
         stFlipDirection = "down";
-        direction = "bear";
-        overrideReasons.push("SuperTrend flipped GREEN→RED (trend down) — override to bear.");
-      } else if (lastST.isGreen && direction === "bear") {
-        direction = "bull";
-        overrideReasons.push("SuperTrend is GREEN but EMAs still bearish — ST override to bull.");
-      } else if (lastST.isRed && direction === "bull") {
-        direction = "bear";
-        overrideReasons.push("SuperTrend is RED but EMAs still bullish — ST override to bear.");
+        overrideReasons.push("SuperTrend flipped GREEN→RED — trend down. THIS LEADS.");
+      } else if (stDirection !== "neutral") {
+        overrideReasons.push(`SuperTrend is ${stDirection.toUpperCase()} — primary trend regime.`);
       }
     }
   }
 
-  // Stop-hunt diamond override (bounce detector)
-  if (bars.length >= 50) {
-    const stArr = computeAdaptiveSuperTrend(bars);
-    const diamonds = detectStopHunts(bars, stArr);
-    const recentDiamondSig = diamonds[diamonds.length - 1];
-    if (recentDiamondSig && bars.length - 1 - recentDiamondSig.index <= 3) {
-      if (recentDiamondSig.inRedArea) {
-        recentDiamondFlag = true;
-        if (direction === "bear" || direction === "neutral") {
-          direction = "bull";
-          overrideReasons.push(`Stop-hunt diamond ${bars.length - 1 - recentDiamondSig.index} bars ago in red zone — liquidity grab + reclaim, bounce long override.`);
-        }
-      }
-    }
+  // === DIRECTION RESOLUTION (indicators lead, EMAs confirm) ===
+  let direction: Direction = "neutral";
+
+  // Diamond bounce = strongest reversal signal
+  if (recentDiamondFlag) {
+    direction = "bull";
+  }
+  // MR extreme = snapback
+  else if (mrExtreme === "low") {
+    direction = "bull";
+  } else if (mrExtreme === "high") {
+    direction = "bear";
+  }
+  // SuperTrend = trend regime
+  else if (stDirection !== "neutral") {
+    direction = stDirection;
+  }
+  // EMA = last resort confirmation only
+  else {
+    direction = emaDirection;
   }
 
-  // Mean reversion override (snapback detector)
-  if (bars.length >= 30) {
-    const mr = analyzeMeanReversion(bars);
-    if (mr.regime === "extreme-low" && mr.currentZ <= -2.5) {
-      mrExtreme = "low";
-      if (direction === "bear" || direction === "neutral") {
-        direction = "bull";
-        overrideReasons.push(`Mean reversion: Z-score ${mr.currentZ.toFixed(2)} (extreme low) — snapback long override, price stretched too far down.`);
-      }
-    } else if (mr.regime === "extreme-high" && mr.currentZ >= 2.5) {
-      mrExtreme = "high";
-      if (direction === "bull" || direction === "neutral") {
-        direction = "bear";
-        overrideReasons.push(`Mean reversion: Z-score ${mr.currentZ.toFixed(2)} (extreme high) — snapback short override, price stretched too far up.`);
-      }
-    }
+  // Momentum reality check (don't call bull while dumping)
+  if (direction === "bull" && dropping) {
+    direction = recentReds >= 4 ? "bear" : "neutral";
+    overrideReasons.push("Price dropping fast (last 5 bars) — momentum reality check overrides.");
+  }
+  if (direction === "bear" && spiking) {
+    direction = recentGreens >= 4 ? "bull" : "neutral";
+    overrideReasons.push("Price spiking fast (last 5 bars) — momentum reality check overrides.");
+  }
+
+  // EMA disagreement note (informational, doesn't override)
+  if (emaDirection !== direction && emaDirection !== "neutral") {
+    overrideReasons.push(`EMA9/21 still ${emaDirection.toUpperCase()} — lagging, confirm only. Indicators say ${direction.toUpperCase()}.`);
   }
 
   const overridden = overrideReasons.length > 0;
@@ -200,8 +215,8 @@ export function analyzeScalpTF(tf: Timeframe, bars: Bar[]): ScalpTFAnalysis {
 
   const notes: string[] = [];
   for (const r of overrideReasons) notes.push(r);
-  if (dropping && ema9 > ema21 && !overrideReasons.length) notes.push(`Price dropping fast (last 5 bars) but EMA9 still above EMA21 — EMAs lagging, momentum override active.`);
-  if (spiking && ema9 < ema21 && !overrideReasons.length) notes.push(`Price spiking fast (last 5 bars) but EMA9 still below EMA21 — EMAs lagging, momentum override active.`);
+  if (dropping && ema9 > ema21 && !overrideReasons.length) notes.push("Price dropping but no indicator signal — sitting neutral.");
+  if (spiking && ema9 < ema21 && !overrideReasons.length) notes.push("Price spiking but no indicator signal — sitting neutral.");
   if (crossDirection === "up" && barsSinceCross <= 3) notes.push(`Fresh EMA9/21 bull cross ${barsSinceCross} bars ago — momentum trigger.`);
   if (crossDirection === "down" && barsSinceCross <= 3) notes.push(`Fresh EMA9/21 bear cross ${barsSinceCross} bars ago — momentum trigger.`);
   if (rsiVal > 70) notes.push(`RSI ${rsiVal.toFixed(0)} hot — extended, wait for pullback.`);

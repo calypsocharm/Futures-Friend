@@ -30,15 +30,79 @@ export function analyzeTimeframe(timeframe: Timeframe, bars: Bar[]): TimeframeAn
   const structure = marketStructure(bars);
   const pressure = flowPressure(bars);
 
-  let direction: Direction = "neutral";
-  let flow: FlowStrength = "range";
-  const notes: string[] = [];
-
+  // EMA direction (confirmation only, lowest priority)
+  let emaDirection: Direction = "neutral";
   if (e20 && e50) {
-    if (e20 > e50 && lastPrice > e20) direction = "bull";
-    else if (e20 < e50 && lastPrice < e20) direction = "bear";
+    if (e20 > e50 && lastPrice > e20) emaDirection = "bull";
+    else if (e20 < e50 && lastPrice < e20) emaDirection = "bear";
   }
 
+  let flow: FlowStrength = "range";
+  const notes: string[] = [];
+  const overrideNotes: string[] = [];
+
+  // === PRIORITY 1: Stop-hunt diamond (highest — catches reversals fastest) ===
+  let diamondBounce = false;
+  if (bars.length >= 50) {
+    const stArr = computeAdaptiveSuperTrend(bars);
+    const diamonds = detectStopHunts(bars, stArr);
+    const recentDiamond = diamonds[diamonds.length - 1];
+    if (recentDiamond && bars.length - 1 - recentDiamond.index <= 5 && recentDiamond.inRedArea) {
+      diamondBounce = true;
+      overrideNotes.push(`Stop-hunt diamond ${bars.length - 1 - recentDiamond.index} bars ago in red zone — liquidity grab + reclaim, bounce. THIS LEADS.`);
+    }
+  }
+
+  // === PRIORITY 2: Mean reversion extreme (snapback) ===
+  let mrExtreme: "low" | "high" | "none" = "none";
+  if (bars.length >= 30) {
+    const mr = analyzeMeanReversion(bars);
+    if (mr.regime === "extreme-low" && mr.currentZ <= -2) {
+      mrExtreme = "low";
+      overrideNotes.push(`Mean reversion: Z-score ${mr.currentZ.toFixed(2)} (extreme low) — snapback long. THIS LEADS.`);
+    } else if (mr.regime === "extreme-high" && mr.currentZ >= 2) {
+      mrExtreme = "high";
+      overrideNotes.push(`Mean reversion: Z-score ${mr.currentZ.toFixed(2)} (extreme high) — snapback short. THIS LEADS.`);
+    }
+  }
+
+  // === PRIORITY 3: SuperTrend (trend regime — primary direction source) ===
+  let stDirection: Direction = "neutral";
+  if (bars.length >= 30) {
+    const stArr = computeAdaptiveSuperTrend(bars);
+    const lastST = stArr[stArr.length - 1];
+    const prevST = stArr[stArr.length - 2];
+    if (lastST && prevST) {
+      stDirection = lastST.isGreen ? "bull" : lastST.isRed ? "bear" : "neutral";
+      if (lastST.isGreen && prevST.isRed) {
+        overrideNotes.push("SuperTrend flipped RED→GREEN — trend up. THIS LEADS.");
+      } else if (lastST.isRed && prevST.isGreen) {
+        overrideNotes.push("SuperTrend flipped GREEN→RED — trend down. THIS LEADS.");
+      } else if (stDirection !== "neutral") {
+        overrideNotes.push(`SuperTrend is ${stDirection.toUpperCase()} — primary trend regime.`);
+      }
+    }
+  }
+
+  // === DIRECTION RESOLUTION (indicators lead, EMAs confirm) ===
+  let direction: Direction = "neutral";
+  if (diamondBounce) {
+    direction = "bull";
+  } else if (mrExtreme === "low") {
+    direction = "bull";
+  } else if (mrExtreme === "high") {
+    direction = "bear";
+  } else if (stDirection !== "neutral") {
+    direction = stDirection;
+  } else {
+    direction = emaDirection;
+  }
+
+  // Market structure fills if still neutral
+  if (structure === "HH-HL" && direction === "neutral") direction = "bull";
+  if (structure === "LH-LL" && direction === "neutral") direction = "bear";
+
+  // Momentum reality check
   const last5 = bars.slice(-5);
   if (last5.length === 5) {
     const recentChange = last5[4].close - last5[0].open;
@@ -48,72 +112,22 @@ export function analyzeTimeframe(timeframe: Timeframe, bars: Bar[]): TimeframeAn
     const spiking = recentChange > atrVal * 0.5 || recentGreens >= 4;
     if (direction === "bull" && dropping) {
       direction = recentReds >= 4 ? "bear" : "neutral";
-      notes.push("Price dropping fast (last 5 bars) — EMA bias overridden by momentum.");
+      overrideNotes.push("Price dropping fast (last 5 bars) — momentum reality check overrides.");
     }
     if (direction === "bear" && spiking) {
       direction = recentGreens >= 4 ? "bull" : "neutral";
-      notes.push("Price spiking fast (last 5 bars) — EMA bias overridden by momentum.");
+      overrideNotes.push("Price spiking fast (last 5 bars) — momentum reality check overrides.");
     }
+  }
+
+  // EMA disagreement note (informational)
+  if (emaDirection !== direction && emaDirection !== "neutral") {
+    overrideNotes.push(`EMA20/50 still ${emaDirection.toUpperCase()} — lagging, confirm only. Indicators say ${direction.toUpperCase()}.`);
   }
 
   if (e200) {
     if (lastPrice > e200 && direction === "bull") notes.push("Price above EMA200 — bullish regime");
     if (lastPrice < e200 && direction === "bear") notes.push("Price below EMA200 — bearish regime");
-  }
-
-  if (structure === "HH-HL" && direction === "neutral") direction = "bull";
-  if (structure === "LH-LL" && direction === "neutral") direction = "bear";
-
-  // --- Indicator overrides (faster than lagging EMAs) ---
-  const overrideNotes: string[] = [];
-
-  // SuperTrend override
-  if (bars.length >= 30) {
-    const stArr = computeAdaptiveSuperTrend(bars);
-    const lastST = stArr[stArr.length - 1];
-    const prevST = stArr[stArr.length - 2];
-    if (lastST && prevST) {
-      if (lastST.isGreen && prevST.isRed) {
-        direction = "bull";
-        overrideNotes.push("SuperTrend flipped RED→GREEN — trend up, override to bull (caught the bounce before EMAs crossed).");
-      } else if (lastST.isRed && prevST.isGreen) {
-        direction = "bear";
-        overrideNotes.push("SuperTrend flipped GREEN→RED — trend down, override to bear (caught the rollover before EMAs crossed).");
-      } else if (lastST.isGreen && direction === "bear") {
-        direction = "bull";
-        overrideNotes.push("SuperTrend is GREEN but EMAs still bearish — ST override to bull.");
-      } else if (lastST.isRed && direction === "bull") {
-        direction = "bear";
-        overrideNotes.push("SuperTrend is RED but EMAs still bullish — ST override to bear.");
-      }
-    }
-  }
-
-  // Stop-hunt diamond override (bounce detector)
-  if (bars.length >= 50) {
-    const stArr = computeAdaptiveSuperTrend(bars);
-    const diamonds = detectStopHunts(bars, stArr);
-    const recentDiamond = diamonds[diamonds.length - 1];
-    if (recentDiamond && bars.length - 1 - recentDiamond.index <= 5) {
-      if (recentDiamond.inRedArea) {
-        if (direction === "bear" || direction === "neutral") {
-          direction = "bull";
-          overrideNotes.push(`Stop-hunt diamond ${bars.length - 1 - recentDiamond.index} bars ago in red zone — liquidity grab + reclaim, bounce long override.`);
-        }
-      }
-    }
-  }
-
-  // Mean reversion override (snapback detector)
-  if (bars.length >= 30) {
-    const mr = analyzeMeanReversion(bars);
-    if (mr.regime === "extreme-low" && mr.currentZ <= -2.5 && (direction === "bear" || direction === "neutral")) {
-      direction = "bull";
-      overrideNotes.push(`Mean reversion: Z-score ${mr.currentZ.toFixed(2)} (extreme low) — snapback long override, price stretched too far down.`);
-    } else if (mr.regime === "extreme-high" && mr.currentZ >= 2.5 && (direction === "bull" || direction === "neutral")) {
-      direction = "bear";
-      overrideNotes.push(`Mean reversion: Z-score ${mr.currentZ.toFixed(2)} (extreme high) — snapback short override, price stretched too far up.`);
-    }
   }
 
   for (const n of overrideNotes) notes.push(n);
