@@ -17,6 +17,7 @@ import { BacktestPanel } from "@/components/BacktestPanel";
 import { AdaptiveSTPanel } from "@/components/AdaptiveSTPanel";
 import { MeanReversionPanel } from "@/components/MeanReversionPanel";
 import { ConfluenceBanner, JournalPanel } from "@/components/ConfluenceJournal";
+import { CorrelationPanel } from "@/components/CorrelationPanel";
 import { WatchlistPanel } from "@/components/WatchlistPanel";
 import { AlertsPanel } from "@/components/AlertsPanel";
 import Link from "next/link";
@@ -274,6 +275,10 @@ export default function Page() {
 
             <div className="mt-6">
               <JournalPanel />
+            </div>
+
+            <div className="mt-6">
+              <CorrelationPanel />
             </div>
           </>
         )}
