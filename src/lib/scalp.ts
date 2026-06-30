@@ -88,6 +88,20 @@ export function analyzeScalpTF(tf: Timeframe, bars: Bar[]): ScalpTFAnalysis {
   if (ema9 > ema21 && lastPrice > ema9) direction = "bull";
   else if (ema9 < ema21 && lastPrice < ema9) direction = "bear";
 
+  const last5 = bars.slice(-5);
+  const recentChange = last5.length === 5 ? last5[4].close - last5[0].open : 0;
+  const recentReds = last5.length === 5 ? last5.filter((b) => b.close < b.open).length : 0;
+  const recentGreens = last5.length === 5 ? last5.filter((b) => b.close >= b.open).length : 0;
+  const dropping = recentChange < -atrVal * 0.5 || recentReds >= 4;
+  const spiking = recentChange > atrVal * 0.5 || recentGreens >= 4;
+
+  if (direction === "bull" && dropping) {
+    direction = recentReds >= 4 ? "bear" : "neutral";
+  }
+  if (direction === "bear" && spiking) {
+    direction = recentGreens >= 4 ? "bull" : "neutral";
+  }
+
   let crossDirection: "up" | "down" | "none" = "none";
   let barsSinceCross = 0;
   for (let i = e9arr.length - 1; i >= 1; i--) {
@@ -106,6 +120,8 @@ export function analyzeScalpTF(tf: Timeframe, bars: Bar[]): ScalpTFAnalysis {
   const flow = Math.abs(momentum) > atrVal * 2 ? "strong" : Math.abs(momentum) > atrVal * 0.5 ? "weak" : "range";
 
   const notes: string[] = [];
+  if (dropping && ema9 > ema21) notes.push(`Price dropping fast (last 5 bars) but EMA9 still above EMA21 — EMAs lagging, momentum override active.`);
+  if (spiking && ema9 < ema21) notes.push(`Price spiking fast (last 5 bars) but EMA9 still below EMA21 — EMAs lagging, momentum override active.`);
   if (crossDirection === "up" && barsSinceCross <= 3) notes.push(`Fresh EMA9/21 bull cross ${barsSinceCross} bars ago — momentum trigger.`);
   if (crossDirection === "down" && barsSinceCross <= 3) notes.push(`Fresh EMA9/21 bear cross ${barsSinceCross} bars ago — momentum trigger.`);
   if (rsiVal > 70) notes.push(`RSI ${rsiVal.toFixed(0)} hot — extended, wait for pullback.`);

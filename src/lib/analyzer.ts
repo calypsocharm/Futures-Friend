@@ -36,6 +36,24 @@ export function analyzeTimeframe(timeframe: Timeframe, bars: Bar[]): TimeframeAn
     if (e20 > e50 && lastPrice > e20) direction = "bull";
     else if (e20 < e50 && lastPrice < e20) direction = "bear";
   }
+
+  const last5 = bars.slice(-5);
+  if (last5.length === 5) {
+    const recentChange = last5[4].close - last5[0].open;
+    const recentReds = last5.filter((b) => b.close < b.open).length;
+    const recentGreens = last5.filter((b) => b.close >= b.open).length;
+    const dropping = recentChange < -atrVal * 0.5 || recentReds >= 4;
+    const spiking = recentChange > atrVal * 0.5 || recentGreens >= 4;
+    if (direction === "bull" && dropping) {
+      direction = recentReds >= 4 ? "bear" : "neutral";
+      notes.push("Price dropping fast (last 5 bars) — EMA bias overridden by momentum.");
+    }
+    if (direction === "bear" && spiking) {
+      direction = recentGreens >= 4 ? "bull" : "neutral";
+      notes.push("Price spiking fast (last 5 bars) — EMA bias overridden by momentum.");
+    }
+  }
+
   if (e200) {
     if (lastPrice > e200 && direction === "bull") notes.push("Price above EMA200 — bullish regime");
     if (lastPrice < e200 && direction === "bear") notes.push("Price below EMA200 — bearish regime");
