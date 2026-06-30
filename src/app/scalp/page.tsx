@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAnalysis } from "@/store/analysis";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import { useWatchlist } from "@/store/watchlist";
@@ -11,6 +11,7 @@ import type { Direction } from "@/lib/types";
 import { SymbolPicker } from "@/components/SymbolPicker";
 import { ScalpChart } from "@/components/ScalpChart";
 import { ORBPanel } from "@/components/ORBPanel";
+import { EconCalendarBanner } from "@/components/EconCalendarBanner";
 import Link from "next/link";
 import { symbolDef } from "@/lib/symbols";
 
@@ -50,10 +51,15 @@ export default function ScalpPage() {
 
   const def = symbolDef(symbol);
   const tfCount = Object.values(barsByTimeframe).filter((b) => b && b.length > 0).length;
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-72 flex-shrink-0 flex-col gap-4 border-r border-[var(--border)] bg-[var(--bg-panel)] p-4">
+      <div className={`ff-overlay ${sidebarOpen ? "open" : ""}`} onClick={() => setSidebarOpen(false)} />
+      <div className="ff-hamburger" onClick={() => setSidebarOpen((s) => !s)}>
+        <span /><span /><span />
+      </div>
+      <aside className={`ff-sidebar flex w-72 flex-shrink-0 flex-col gap-4 border-r border-[var(--border)] bg-[var(--bg-panel)] p-4 ${sidebarOpen ? "open" : ""}`}>
         <div>
           <div className="text-xs uppercase tracking-widest text-[var(--text-muted)]">
             Scalping Friend
@@ -114,6 +120,8 @@ export default function ScalpPage() {
             </div>
           </div>
         )}
+
+        <EconCalendarBanner />
 
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-panel-2)] p-3 text-xs">
           <div className="text-[var(--text-muted)]">Scalp TFs</div>

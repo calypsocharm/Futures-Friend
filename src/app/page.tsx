@@ -18,6 +18,7 @@ import { AdaptiveSTPanel } from "@/components/AdaptiveSTPanel";
 import { MeanReversionPanel } from "@/components/MeanReversionPanel";
 import { ConfluenceBanner, JournalPanel } from "@/components/ConfluenceJournal";
 import { CorrelationPanel } from "@/components/CorrelationPanel";
+import { EconCalendarBanner } from "@/components/EconCalendarBanner";
 import { WatchlistPanel } from "@/components/WatchlistPanel";
 import { AlertsPanel } from "@/components/AlertsPanel";
 import Link from "next/link";
@@ -62,10 +63,15 @@ export default function Page() {
   }, [report, symbol, setItem]);
 
   const def = symbolDef(symbol);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-72 flex-shrink-0 flex-col gap-4 border-r border-[var(--border)] bg-[var(--bg-panel)] p-4">
+      <div className={`ff-overlay ${sidebarOpen ? "open" : ""}`} onClick={() => setSidebarOpen(false)} />
+      <div className="ff-hamburger" onClick={() => setSidebarOpen((s) => !s)}>
+        <span /><span /><span />
+      </div>
+      <aside className={`ff-sidebar flex w-72 flex-shrink-0 flex-col gap-4 border-r border-[var(--border)] bg-[var(--bg-panel)] p-4 ${sidebarOpen ? "open" : ""}`}>
         <div>
           <div className="text-xs uppercase tracking-widest text-[var(--text-muted)]">
             Futures Friend
@@ -151,6 +157,7 @@ export default function Page() {
             </div>
           </div>
         )}
+        <EconCalendarBanner />
         <BarInput />
         <p className="mt-auto text-[10px] leading-relaxed text-[var(--text-muted)]">
           Live data via Yahoo Finance public endpoints (free, no key). Educational tool only — not financial advice.

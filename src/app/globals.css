@@ -10,6 +10,7 @@
   --bull: #26d07c;
   --bear: #ff5c5c;
   --neutral: #f0b429;
+  --sidebar-w: 18rem;
 }
 
 html,
@@ -33,4 +34,83 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #2a3340;
   border-radius: 4px;
+}
+
+/* Mobile sidebar drawer */
+@media (max-width: 768px) {
+  .ff-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-w);
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+  }
+  .ff-sidebar.open {
+    transform: translateX(0);
+  }
+  .ff-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 40;
+  }
+  .ff-overlay.open {
+    display: block;
+  }
+  .ff-hamburger {
+    display: flex;
+  }
+}
+
+@media (min-width: 769px) {
+  .ff-sidebar {
+    transform: none;
+  }
+  .ff-overlay {
+    display: none !important;
+  }
+  .ff-hamburger {
+    display: none;
+  }
+}
+
+.ff-hamburger {
+  position: fixed;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 60;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ff-hamburger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--text);
+}
+
+/* Make SVG charts scale on mobile */
+@media (max-width: 768px) {
+  .ff-chart-svg {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Tables: horizontal scroll on mobile */
+@media (max-width: 768px) {
+  .ff-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
