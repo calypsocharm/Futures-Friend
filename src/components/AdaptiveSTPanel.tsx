@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAnalysis } from "@/store/analysis";
+import { useIndicatorSettings } from "@/store/settings";
 import { buildAdaptiveSTReport } from "@/lib/adaptiveSt";
 import type { Timeframe } from "@/lib/types";
 import { TIMEFRAME_LABELS } from "@/lib/types";
@@ -21,7 +22,10 @@ export function AdaptiveSTPanel() {
 
   const bars = useMemo(() => barsByTimeframe[tf] ?? [], [barsByTimeframe, tf]);
   const slice = useMemo(() => bars.slice(-count), [bars, count]);
-  const report = useMemo(() => buildAdaptiveSTReport(slice), [slice]);
+  const stInputs = useIndicatorSettings((s) => s.st);
+  const stopHuntInputs = useIndicatorSettings((s) => s.stopHunt);
+  const dcaInputs = useIndicatorSettings((s) => s.dca);
+  const report = useMemo(() => buildAdaptiveSTReport(slice, stInputs, stopHuntInputs, dcaInputs), [slice, stInputs, stopHuntInputs, dcaInputs]);
 
   if (slice.length < 30) {
     return (

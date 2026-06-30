@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useAnalysis } from "@/store/analysis";
 import { analyzeMeanReversion } from "@/lib/meanReversion";
+import { useIndicatorSettings } from "@/store/settings";
 import type { Timeframe } from "@/lib/types";
 import { TIMEFRAME_LABELS } from "@/lib/types";
 
@@ -21,7 +22,8 @@ export function MeanReversionPanel() {
 
   const bars = useMemo(() => barsByTimeframe[tf] ?? [], [barsByTimeframe, tf]);
   const slice = useMemo(() => bars.slice(-count), [bars, count]);
-  const mr = useMemo(() => analyzeMeanReversion(slice), [slice]);
+  const mrInputs = useIndicatorSettings((s) => s.mr);
+  const mr = useMemo(() => analyzeMeanReversion(slice, mrInputs), [slice, mrInputs]);
 
   if (slice.length < 30) {
     return (

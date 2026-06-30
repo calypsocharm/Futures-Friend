@@ -19,6 +19,8 @@ import { MeanReversionPanel } from "@/components/MeanReversionPanel";
 import { ConfluenceBanner, JournalPanel } from "@/components/ConfluenceJournal";
 import { CorrelationPanel } from "@/components/CorrelationPanel";
 import { EconCalendarBanner } from "@/components/EconCalendarBanner";
+import { IndicatorSettingsPanel } from "@/components/IndicatorSettingsPanel";
+import { BestPlaysPanel } from "@/components/BestPlaysPanel";
 import { WatchlistPanel } from "@/components/WatchlistPanel";
 import { AlertsPanel } from "@/components/AlertsPanel";
 import Link from "next/link";
@@ -196,6 +198,10 @@ export default function Page() {
           <>
             <ConfluenceBanner />
 
+            <div className="mt-4">
+              <BestPlaysPanel />
+            </div>
+
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <AdvisorBanner />
@@ -209,6 +215,12 @@ export default function Page() {
             {report && report.perTimeframe.length > 0 && (
               <div className="mt-6">
                 <ChartPanel />
+              </div>
+            )}
+
+            {report && report.perTimeframe.length > 0 && (
+              <div className="mt-6">
+                <IndicatorSettingsPanel />
               </div>
             )}
 

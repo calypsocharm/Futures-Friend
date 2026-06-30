@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useAnalysis } from "@/store/analysis";
 import { analyzeORB } from "@/lib/orb";
+import { useIndicatorSettings } from "@/store/settings";
 
 const W = 900;
 const PAD_L = 8;
@@ -18,7 +19,8 @@ export function ORBPanel() {
 
   const bars = useMemo(() => barsByTimeframe["1m"] ?? barsByTimeframe["5m"] ?? [], [barsByTimeframe]);
   const slice = useMemo(() => bars.slice(-count), [bars, count]);
-  const orb = useMemo(() => analyzeORB(slice), [slice]);
+  const orbInputs = useIndicatorSettings((s) => s.orb);
+  const orb = useMemo(() => analyzeORB(slice, orbInputs), [slice, orbInputs]);
 
   if (slice.length < 30) {
     return (

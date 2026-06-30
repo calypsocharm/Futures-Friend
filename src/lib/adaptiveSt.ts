@@ -354,7 +354,12 @@ export interface AdaptiveSTReport {
   advisor: string;
 }
 
-export function buildAdaptiveSTReport(bars: Bar[]): AdaptiveSTReport {
+export function buildAdaptiveSTReport(
+  bars: Bar[],
+  stInputs: AdaptiveSTInputs = DEFAULT_ST_INPUTS,
+  stopHuntInputs: StopHuntInputs = DEFAULT_STOPHUNT_INPUTS,
+  dcaInputs: DCAInputs = DEFAULT_DCA_INPUTS
+): AdaptiveSTReport {
   if (bars.length < 30) {
     return {
       st: [],
@@ -379,9 +384,9 @@ export function buildAdaptiveSTReport(bars: Bar[]): AdaptiveSTReport {
       advisor: "Not enough bars to compute Adaptive SuperTrend.",
     };
   }
-  const st = computeAdaptiveSuperTrend(bars);
-  const diamonds = detectStopHunts(bars, st);
-  const trade = simulateDCATrade(bars, st, diamonds);
+  const st = computeAdaptiveSuperTrend(bars, stInputs);
+  const diamonds = detectStopHunts(bars, st, stopHuntInputs);
+  const trade = simulateDCATrade(bars, st, diamonds, dcaInputs);
   const last = st[st.length - 1];
   const lastPrice = bars[bars.length - 1].close;
   const currentDirection: "bull" | "bear" | "neutral" = last.isGreen ? "bull" : last.isRed ? "bear" : "neutral";
