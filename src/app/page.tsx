@@ -16,6 +16,7 @@ import { ChartPanel } from "@/components/ChartPanel";
 import { BacktestPanel } from "@/components/BacktestPanel";
 import { AdaptiveSTPanel } from "@/components/AdaptiveSTPanel";
 import { MeanReversionPanel } from "@/components/MeanReversionPanel";
+import { ConfluenceBanner, JournalPanel } from "@/components/ConfluenceJournal";
 import { WatchlistPanel } from "@/components/WatchlistPanel";
 import { AlertsPanel } from "@/components/AlertsPanel";
 import Link from "next/link";
@@ -185,7 +186,9 @@ export default function Page() {
           <BacktestPanel />
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <ConfluenceBanner />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <AdvisorBanner />
               </div>
@@ -268,6 +271,10 @@ export default function Page() {
                 ))}
               </div>
             )}
+
+            <div className="mt-6">
+              <JournalPanel />
+            </div>
           </>
         )}
       </main>
