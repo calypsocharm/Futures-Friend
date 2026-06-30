@@ -31,6 +31,13 @@ interface ScanResult {
   atrPct: number;
   tickValue: number;
   stopDollars: number;
+  stopPrice: number;
+  target1: number;
+  target2: number;
+  holdTime: string;
+  holdReason: string;
+  exitCondition: string;
+  invalidation: string;
 }
 
 async function fetchScanBars(symbol: string): Promise<Partial<Record<string, Bar[]>>> {
@@ -82,6 +89,39 @@ export function BestPlaysPanel() {
         atrPct = lastPrice > 0 ? (atrVal / lastPrice) * 100 : 0;
       }
       const stopDollars = atrVal * 0.75 * (def.tickValue / def.tickSize);
+
+      // Determine hold time based on which TFs have the most bars + signal strength
+      const dailyBars = bars["1D"] ?? [];
+      const h4Bars = bars["4H"] ?? [];
+      const h1Bars = bars["1H"] ?? [];
+      const hasDaily = dailyBars.length >= 30;
+      const has4H = h4Bars.length >= 20;
+      const has1H = h1Bars.length >= 20;
+
+      let holdTime = "Intraday (hours)";
+      let holdReason = "Signal driven by hourly timeframe";
+      if (hasDaily && c.agreement >= 70) {
+        holdTime = "2-5 days (swing)";
+        holdReason = "Daily confluence is strong — this is a swing hold, not a quick flip";
+      } else if (has4H && c.agreement >= 60) {
+        holdTime = "1-3 days";
+        holdReason = "4H confluence — hold overnight to a few days";
+      } else if (has1H) {
+        holdTime = "2-8 hours (intraday)";
+        holdReason = "1H signal — intraday hold, exit by end of session unless it runs";
+      } else {
+        holdTime = "Minutes to 1 hour";
+        holdReason = "Fast TF signal only — quick scalp, don't hold overnight";
+      }
+
+      // Exit conditions
+      const bull = c.dominant === "bull";
+      const stopPrice = bull ? lastPrice - atrVal * 0.75 : lastPrice + atrVal * 0.75;
+      const target1 = bull ? lastPrice + atrVal * 1.5 : lastPrice - atrVal * 1.5;
+      const target2 = bull ? lastPrice + atrVal * 3 : lastPrice - atrVal * 3;
+      const exitCondition = `Scale 50% at T1 (${fmt(target1)}), trail rest to T2 (${fmt(target2)}). Move stop to breakeven after T1 hits.`;
+      const invalidation = `Close below ${fmt(stopPrice)} (0.75×ATR) = thesis wrong, exit immediately. ${rsi > 70 && bull ? "RSI overbought — if price stalls at T1, take profit don't hold hoping." : rsi < 30 && !bull ? "RSI oversold — if price stalls at T1, take profit don't hold hoping." : ""}`;
+
       out.push({
         symbol: def.symbol,
         label: def.label,
@@ -95,6 +135,13 @@ export function BestPlaysPanel() {
         atrPct: Math.round(atrPct * 100) / 100,
         tickValue: def.tickValue,
         stopDollars: Math.round(stopDollars),
+        stopPrice,
+        target1,
+        target2,
+        holdTime,
+        holdReason,
+        exitCondition,
+        invalidation,
       });
     }
     out.sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
@@ -192,44 +239,97 @@ export function BestPlaysPanel() {
 function ScanRow({ r, rank, onClick }: { r: ScanResult; rank: number; onClick: () => void }) {
   const color = GRADE_COLOR[r.grade];
   const dirColor = r.direction === "bull" ? "var(--bull)" : "var(--bear)";
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <button
-      onClick={onClick}
-      className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-xs transition hover:border-[var(--neutral)]"
+    <div
+      className="rounded-md border transition"
       style={{ borderColor: color, background: "var(--bg-panel-2)" }}
     >
-      <div className="flex items-center gap-3">
-        <span className="flex h-8 w-8 items-center justify-center rounded text-sm font-black" style={{ background: color, color: "var(--bg)" }}>
-          {r.grade}
-        </span>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-mono font-bold">{r.symbol}</span>
-            <span style={{ color: dirColor }}>{DIR_ICON[r.direction]}</span>
-            <span className="text-[var(--text-muted)]">#{rank}</span>
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-8 w-8 items-center justify-center rounded text-sm font-black" style={{ background: color, color: "var(--bg)" }}>
+            {r.grade}
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold">{r.symbol}</span>
+              <span style={{ color: dirColor }}>{DIR_ICON[r.direction]}</span>
+              <span className="text-[var(--text-muted)]">#{rank}</span>
+            </div>
+            <div className="text-[10px] text-[var(--text-muted)]">{r.category} · {r.agreement}% agree · ⏱ {r.holdTime}</div>
           </div>
-          <div className="text-[10px] text-[var(--text-muted)]">{r.category} · {r.agreement}% agree</div>
         </div>
-      </div>
-      <div className="flex items-center gap-4 font-mono">
-        <div className="text-right">
-          <div className="text-[10px] text-[var(--text-muted)]">Price</div>
-          <div className="font-bold">{fmt(r.lastPrice)}</div>
+        <div className="flex items-center gap-4 font-mono">
+          <div className="text-right">
+            <div className="text-[10px] text-[var(--text-muted)]">Price</div>
+            <div className="font-bold">{fmt(r.lastPrice)}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] text-[var(--text-muted)]">RSI</div>
+            <div style={{ color: r.rsi > 70 ? "var(--bear)" : r.rsi < 30 ? "var(--bull)" : "var(--text)" }}>{r.rsi}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] text-[var(--text-muted)]">Stop $</div>
+            <div style={{ color: "var(--bear)" }}>${r.stopDollars}</div>
+          </div>
+          <span className="text-[var(--text-muted)]">{expanded ? "▼" : "▶"}</span>
         </div>
-        <div className="text-right">
-          <div className="text-[10px] text-[var(--text-muted)]">RSI</div>
-          <div style={{ color: r.rsi > 70 ? "var(--bear)" : r.rsi < 30 ? "var(--bull)" : "var(--text)" }}>{r.rsi}</div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-[var(--border)] px-3 py-3 text-xs">
+          {/* Trade plan grid */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <PlanBlock label="Entry" value={fmt(r.lastPrice)} color="var(--neutral)" />
+            <PlanBlock label="Stop" value={fmt(r.stopPrice)} sub={`$${r.stopDollars}`} color="var(--bear)" />
+            <PlanBlock label="Target 1" value={fmt(r.target1)} sub="scale 50%" color="var(--bull)" />
+            <PlanBlock label="Target 2" value={fmt(r.target2)} sub="trail rest" color="var(--bull)" />
+          </div>
+
+          {/* Hold time */}
+          <div className="mt-3 rounded-md border border-[var(--border)] p-2" style={{ background: "var(--bg-panel)" }}>
+            <div className="flex items-center gap-2">
+              <span className="text-[var(--neutral)] font-bold">⏱ Hold time: {r.holdTime}</span>
+            </div>
+            <div className="mt-0.5 text-[var(--text-muted)]">{r.holdReason}</div>
+          </div>
+
+          {/* Exit conditions */}
+          <div className="mt-2 rounded-md border border-[var(--border)] p-2" style={{ background: "var(--bg-panel)" }}>
+            <div className="text-[var(--bull)] font-bold">📋 Exit plan</div>
+            <div className="mt-0.5 text-[var(--text)]">{r.exitCondition}</div>
+          </div>
+
+          {/* Invalidation */}
+          <div className="mt-2 rounded-md border border-[var(--bear)] p-2" style={{ background: "var(--bg-panel)" }}>
+            <div className="text-[var(--bear)] font-bold">⛔ Invalidation</div>
+            <div className="mt-0.5 text-[var(--text)]">{r.invalidation}</div>
+          </div>
+
+          {/* Load into dashboard */}
+          <button
+            onClick={onClick}
+            className="mt-3 w-full rounded-md bg-[var(--neutral)] px-3 py-1.5 text-xs font-bold text-[var(--bg)]"
+          >
+            → Load {r.symbol} into dashboard
+          </button>
         </div>
-        <div className="text-right">
-          <div className="text-[10px] text-[var(--text-muted)]">ATR%</div>
-          <div>{r.atrPct}</div>
-        </div>
-        <div className="text-right">
-          <div className="text-[10px] text-[var(--text-muted)]">Stop $</div>
-          <div style={{ color: "var(--bear)" }}>${r.stopDollars}</div>
-        </div>
-      </div>
-    </button>
+      )}
+    </div>
+  );
+}
+
+function PlanBlock({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
+  return (
+    <div className="rounded-md border p-2" style={{ borderColor: color, background: "var(--bg-panel)" }}>
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+      <div className="font-mono font-bold" style={{ color }}>{value}</div>
+      {sub && <div className="text-[10px] text-[var(--text-muted)]">{sub}</div>}
+    </div>
   );
 }
 
