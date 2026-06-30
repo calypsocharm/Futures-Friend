@@ -154,9 +154,18 @@ export default function Page() {
               <span className="font-mono">{def.tickSize}</span>
               <span className="text-[var(--text-muted)]">Tick value</span>
               <span className="font-mono">${def.tickValue}</span>
+              <span className="text-[var(--text-muted)]">Margin req</span>
+              <span className="font-mono font-bold" style={{ color: def.margin > 0 ? (def.margin <= 1000 ? "var(--bull)" : def.margin <= 3000 ? "var(--neutral)" : "var(--bear)") : "var(--text-muted)" }}>
+                {def.margin > 0 ? `$${def.margin.toLocaleString()}` : "N/A (spot)"}
+              </span>
               <span className="text-[var(--text-muted)]">Yahoo</span>
               <span className="font-mono">{def.yahoo}</span>
             </div>
+            {def.margin > 1000 && (
+              <div className="mt-1 text-[10px]" style={{ color: "var(--bear)" }}>
+                ⚠ Margin ${def.margin.toLocaleString()} — may not fit small accounts
+              </div>
+            )}
           </div>
         )}
         <EconCalendarBanner />

@@ -30,6 +30,7 @@ interface ScanResult {
   rsi: number;
   atrPct: number;
   tickValue: number;
+  margin: number;
   stopDollars: number;
   stopPrice: number;
   target1: number;
@@ -60,6 +61,11 @@ export function BestPlaysPanel() {
   const [loading, setLoading] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [lastScan, setLastScan] = useState<number | null>(null);
+  const [accountSize, setAccountSize] = useState(1000);
+  const [maxRiskPct, setMaxRiskPct] = useState(5);
+  const [hideUnaffordable, setHideUnaffordable] = useState(true);
+
+  const maxRiskDollars = accountSize * (maxRiskPct / 100);
 
   async function scan() {
     setLoading(true);
@@ -134,6 +140,7 @@ export function BestPlaysPanel() {
         rsi: Math.round(rsi),
         atrPct: Math.round(atrPct * 100) / 100,
         tickValue: def.tickValue,
+        margin: def.margin,
         stopDollars: Math.round(stopDollars),
         stopPrice,
         target1,
@@ -157,9 +164,12 @@ export function BestPlaysPanel() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  const longs = results.filter((r) => r.direction === "bull");
-  const shorts = results.filter((r) => r.direction === "bear");
-  const neutrals = results.filter((r) => r.direction === "neutral");
+  const affordable = (r: ScanResult) => r.margin <= accountSize && r.stopDollars <= maxRiskDollars;
+  const visibleResults = hideUnaffordable ? results.filter(affordable) : results;
+  const longs = visibleResults.filter((r) => r.direction === "bull");
+  const shorts = visibleResults.filter((r) => r.direction === "bear");
+  const neutrals = visibleResults.filter((r) => r.direction === "neutral");
+  const hiddenCount = results.length - visibleResults.length;
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-4">
@@ -183,6 +193,28 @@ export function BestPlaysPanel() {
         </div>
       </div>
 
+      {/* Account size filter */}
+      <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-[var(--border)] p-2 text-xs" style={{ background: "var(--bg-panel-2)" }}>
+        <span className="text-[var(--text-muted)]">Account:</span>
+        <span className="font-mono font-bold text-[var(--text)]">${accountSize.toLocaleString()}</span>
+        <input type="range" min="500" max="50000" step="500" value={accountSize} onChange={(e) => setAccountSize(Number(e.target.value))} className="flex-1" style={{ accentColor: "var(--neutral)" }} />
+        <span className="text-[var(--text-muted)]">Max risk:</span>
+        <select value={maxRiskPct} onChange={(e) => setMaxRiskPct(Number(e.target.value))} className="rounded-md border border-[var(--border)] bg-[var(--bg-panel)] px-2 py-0.5 text-xs">
+          <option value={1}>1% (${Math.round(accountSize * 0.01)})</option>
+          <option value={2}>2% (${Math.round(accountSize * 0.02)})</option>
+          <option value={3}>3% (${Math.round(accountSize * 0.03)})</option>
+          <option value={5}>5% (${Math.round(accountSize * 0.05)})</option>
+          <option value={10}>10% (${Math.round(accountSize * 0.10)})</option>
+        </select>
+        <label className="flex items-center gap-1 cursor-pointer">
+          <input type="checkbox" checked={hideUnaffordable} onChange={(e) => setHideUnaffordable(e.target.checked)} className="accent-[var(--neutral)]" />
+          <span className="text-[var(--text-muted)]">Hide unaffordable</span>
+        </label>
+        <span className="text-[10px]" style={{ color: "var(--neutral)" }}>
+          Budget: ${Math.round(maxRiskDollars)} stop max
+        </span>
+      </div>
+
       {loading && results.length === 0 ? (
         <div className="flex h-40 items-center justify-center text-sm text-[var(--text-muted)]">
           Scanning all 20 symbols…
@@ -195,7 +227,7 @@ export function BestPlaysPanel() {
               <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--bull)]">Long candidates (ranked)</div>
               <div className="space-y-1.5">
                 {longs.map((r, i) => (
-                  <ScanRow key={r.symbol} r={r} rank={i + 1} onClick={() => setSymbol(r.symbol)} />
+                  <ScanRow key={r.symbol} r={r} rank={i + 1} onClick={() => setSymbol(r.symbol)} accountSize={accountSize} maxRiskDollars={maxRiskDollars} />
                 ))}
               </div>
             </div>
@@ -207,7 +239,7 @@ export function BestPlaysPanel() {
               <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--bear)]">Short candidates (ranked)</div>
               <div className="space-y-1.5">
                 {shorts.map((r, i) => (
-                  <ScanRow key={r.symbol} r={r} rank={i + 1} onClick={() => setSymbol(r.symbol)} />
+                  <ScanRow key={r.symbol} r={r} rank={i + 1} onClick={() => setSymbol(r.symbol)} accountSize={accountSize} maxRiskDollars={maxRiskDollars} />
                 ))}
               </div>
             </div>
@@ -228,7 +260,8 @@ export function BestPlaysPanel() {
           )}
 
           <p className="mt-3 text-[10px] text-[var(--text-muted)]">
-            Click any row to load that symbol into the dashboard. Stop $ = 0.75×ATR in dollar terms per contract. Re-scan to refresh.
+            Click any row to expand the full trade plan. Click &ldquo;Load into dashboard&rdquo; to switch. Stop $ = 0.75×ATR per contract.
+            {hiddenCount > 0 && <span style={{ color: "var(--bear)" }}> {hiddenCount} symbol(s) hidden — margin or stop exceeds your ${accountSize} account at {maxRiskPct}% risk.</span>}
           </p>
         </>
       ) : null}
@@ -236,7 +269,7 @@ export function BestPlaysPanel() {
   );
 }
 
-function ScanRow({ r, rank, onClick }: { r: ScanResult; rank: number; onClick: () => void }) {
+function ScanRow({ r, rank, onClick, accountSize, maxRiskDollars }: { r: ScanResult; rank: number; onClick: () => void; accountSize: number; maxRiskDollars: number }) {
   const color = GRADE_COLOR[r.grade];
   const dirColor = r.direction === "bull" ? "var(--bull)" : "var(--bear)";
   const [expanded, setExpanded] = useState(false);
@@ -273,8 +306,12 @@ function ScanRow({ r, rank, onClick }: { r: ScanResult; rank: number; onClick: (
             <div style={{ color: r.rsi > 70 ? "var(--bear)" : r.rsi < 30 ? "var(--bull)" : "var(--text)" }}>{r.rsi}</div>
           </div>
           <div className="text-right">
+            <div className="text-[10px] text-[var(--text-muted)]">Margin</div>
+            <div style={{ color: r.margin <= accountSize ? "var(--bull)" : "var(--bear)" }}>${r.margin > 0 ? r.margin.toLocaleString() : "—"}</div>
+          </div>
+          <div className="text-right">
             <div className="text-[10px] text-[var(--text-muted)]">Stop $</div>
-            <div style={{ color: "var(--bear)" }}>${r.stopDollars}</div>
+            <div style={{ color: r.stopDollars <= maxRiskDollars ? "var(--bull)" : "var(--bear)" }}>${r.stopDollars}</div>
           </div>
           <span className="text-[var(--text-muted)]">{expanded ? "▼" : "▶"}</span>
         </div>
