@@ -10,6 +10,7 @@ import { SCALP_TIMEFRAMES, TIMEFRAME_LABELS } from "@/lib/types";
 import type { Direction } from "@/lib/types";
 import { SymbolPicker } from "@/components/SymbolPicker";
 import { ScalpChart } from "@/components/ScalpChart";
+import { ORBPanel } from "@/components/ORBPanel";
 import Link from "next/link";
 import { symbolDef } from "@/lib/symbols";
 
@@ -165,6 +166,11 @@ export default function ScalpPage() {
             {/* Chart */}
             <div className="mt-6">
               <ScalpChart report={report} />
+            </div>
+
+            {/* ORB */}
+            <div className="mt-6">
+              <ORBPanel />
             </div>
 
             {/* Signals */}
