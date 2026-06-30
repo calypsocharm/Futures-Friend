@@ -15,6 +15,7 @@ import { GaugesPanel } from "@/components/GaugesPanel";
 import { ChartPanel } from "@/components/ChartPanel";
 import { BacktestPanel } from "@/components/BacktestPanel";
 import { AdaptiveSTPanel } from "@/components/AdaptiveSTPanel";
+import { MeanReversionPanel } from "@/components/MeanReversionPanel";
 import { WatchlistPanel } from "@/components/WatchlistPanel";
 import { AlertsPanel } from "@/components/AlertsPanel";
 import Link from "next/link";
@@ -203,6 +204,12 @@ export default function Page() {
             {report && report.perTimeframe.length > 0 && (
               <div className="mt-6">
                 <AdaptiveSTPanel />
+              </div>
+            )}
+
+            {report && report.perTimeframe.length > 0 && (
+              <div className="mt-6">
+                <MeanReversionPanel />
               </div>
             )}
 
